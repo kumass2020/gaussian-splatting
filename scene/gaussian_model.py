@@ -123,7 +123,15 @@ class GaussianModel:
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
 
+    def duplicate_pcd(self, pcd : BasicPointCloud):
+        colors = np.repeat(pcd.colors, 3, axis=0)
+        points = np.repeat(pcd.points, 3, axis=0)
+        normals = np.repeat(pcd.normals, 3, axis=0)
+        new_pcd = BasicPointCloud(points, colors, normals)
+        return new_pcd
+
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
+        pcd = self.duplicate_pcd(pcd)
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
@@ -389,31 +397,7 @@ class GaussianModel:
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
     def calc_similarity(self, similarity_threshold=0.99999):
-
-
-        # distance_matrix = torch.cdist(self.get_xyz, self.get_xyz)
-        # Normalize the tensor along the last dimension
-        # This step is important for cosine similarity calculation
-        normalized_tensor = F.normalize(self.get_xyz, p=2, dim=1)
-
-        # Initialize a list to store the indices of vector pairs with cosine similarity below the threshold
-        similar_pairs = []
-
-        # Compute cosine similarity for each vector with the entire tensor
-        for i in range(normalized_tensor.size(0)):
-            vector = normalized_tensor[i].unsqueeze(0)
-            cosine_sim = torch.mm(vector, normalized_tensor.t()).squeeze()
-
-            # Find indices where cosine similarity is below the threshold (excluding the vector itself)
-            below_threshold_indices = (cosine_sim > similarity_threshold).nonzero(as_tuple=True)[0]
-            below_threshold_indices = below_threshold_indices[below_threshold_indices != i]
-
-            # Store the pairs
-            for j in below_threshold_indices:
-                similar_pairs.append((i, j.item()))
-
-        # similar_pairs contains tuples of indices of the vector pairs
-        return similar_pairs
+        pass
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
         grads = self.xyz_gradient_accum / self.denom
