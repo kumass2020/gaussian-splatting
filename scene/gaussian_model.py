@@ -8,6 +8,7 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
+import math
 
 import torch
 import numpy as np
@@ -124,9 +125,43 @@ class GaussianModel:
             self.active_sh_degree += 1
 
     def duplicate_pcd(self, pcd : BasicPointCloud):
+        # Define mean and standard deviation for the normal distribution
+        mean_points = pcd.points.mean()
+        std_points = pcd.points.std()
+
+        mean_normals = pcd.normals.mean()
+        std_normals = pcd.normals.std()
+
+        std_colors = pcd.colors.std()
+
         colors = np.repeat(pcd.colors, 3, axis=0)
         points = np.repeat(pcd.points, 3, axis=0)
         normals = np.repeat(pcd.normals, 3, axis=0)
+
+        # Iterate through the array
+        for i in range(int(points.shape[0] * 2 / 3)):
+            # Sample 3 values from the normal distribution
+            samples = np.random.normal(0, 1, 3)
+
+            # Add these samples to each element of the current row of the array
+            points[i] += samples
+
+        # # Iterate through the array
+        # for i in range(int(normals.shape[0] * 2 / 3)):
+        #     # Sample 3 values from the normal distribution
+        #     samples = np.random.normal(0, std_normals, 3)
+        #
+        #     # Add these samples to each element of the current row of the array
+        #     normals[i] += samples
+
+        # # Iterate through the array
+        # for i in range(int(colors.shape[0] * 2 / 3)):
+        #     # Sample 3 values from the normal distribution
+        #     samples = np.random.normal(0, std_colors, 3)
+        #
+        #     # Add these samples to each element of the current row of the array
+        #     colors[i] += samples
+
         new_pcd = BasicPointCloud(points, colors, normals)
         return new_pcd
 
