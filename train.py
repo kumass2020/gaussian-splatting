@@ -29,6 +29,12 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+    repo = "isl-org/ZoeDepth"
+    # Zoe_N
+    model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
+
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    zoe = model_zoe_n.to(DEVICE)
     # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
@@ -116,32 +122,35 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # depth_pred = zerodepth_model(rgb, intrinsics)
 
         # Depth by ZoeDepth
-        repo = "isl-org/ZoeDepth"
-        # Zoe_N
-        model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
+        if iteration % 1000 == 0:
+            # Local file
+            from PIL import Image
+            import torchvision.transforms as transforms
+            _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
+            pil_image_gt = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
+            depth_numpy_gt = zoe.infer_pil(pil_image_gt)  # as numpy
 
-        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-        zoe = model_zoe_n.to(DEVICE)
+            pred_image = image.cpu()  # Move to CPU if it's on CUDA
+            pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
+            depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-        # Local file
-        from PIL import Image
-        import torchvision.transforms as transforms
-        _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
-        pil_image = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
-        depth_numpy = zoe.infer_pil(pil_image)  # as numpy
+            depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
 
-        depth_pil = zoe.infer_pil(pil_image, output_type="pil")  # as 16-bit PIL Image
+            depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
 
-        depth_tensor = zoe.infer_pil(pil_image, output_type="tensor")  # as torch tensor
+            # Colorize output
+            from zoedepth.utils.misc import colorize
 
-        # Colorize output
-        from zoedepth.utils.misc import colorize
+            colored_gt = colorize(depth_numpy_gt)
+            colored_pred = colorize(depth_numpy_pred)
 
-        colored = colorize(depth_numpy)
+            # save colored output
+            fpath_colored = "output_colored_gt.png"
+            Image.fromarray(colored_gt).save(fpath_colored)
 
-        # save colored output
-        fpath_colored = "output_colored.png"
-        Image.fromarray(colored).save(fpath_colored)
+            fpath_colored = "output_colored_pred.png"
+            Image.fromarray(colored_pred).save(fpath_colored)
+            pass
 
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
