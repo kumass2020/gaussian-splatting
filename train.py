@@ -29,6 +29,7 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+    # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -91,9 +92,56 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
 
-        zerodepth_model = torch.hub.load("TRI-ML/vidar", "ZeroDepth", pretrained=True, trust_repo=True)
-        intrinsics = gt_image
+        # # zerodepth_model = torch.hub.load("TRI-ML/vidar", "ZeroDepth", pretrained=True, trust_repo=True)
+        # import vidar.arch.networks.perceiver.ZeroDepthNet as ZeroDepthNet
+        # import vidar.utils.config as config
+        # # import scene.dataset_readers as dataset_readers
+        # zerodepth_model = ZeroDepthNet.ZeroDepthNet(config.read_config('zerodepth_config.yaml'))
+        #
+        # # Specify the path to your text file
+        # file_path = './download/tandt_db/train/sparse/0'
+        #
+        # # Open the file and read its contents
+        # with open(file_path, 'r') as file:
+        #     content = file.read()
+        #
+        # # Print the contents
+        # print(content)
+        #
+        # intrinsics = torch.tensor(viewpoint_cam.R)
+        # rgb = gt_image
+        # depth = zerodepth_model.forward(rgb, intrinsics)
 
+
+        # depth_pred = zerodepth_model(rgb, intrinsics)
+
+        # Depth by ZoeDepth
+        repo = "isl-org/ZoeDepth"
+        # Zoe_N
+        model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
+
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        zoe = model_zoe_n.to(DEVICE)
+
+        # Local file
+        from PIL import Image
+        import torchvision.transforms as transforms
+        _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
+        pil_image = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
+        depth_numpy = zoe.infer_pil(pil_image)  # as numpy
+
+        depth_pil = zoe.infer_pil(pil_image, output_type="pil")  # as 16-bit PIL Image
+
+        depth_tensor = zoe.infer_pil(pil_image, output_type="tensor")  # as torch tensor
+
+        # Colorize output
+        from zoedepth.utils.misc import colorize
+
+        colored = colorize(depth_numpy)
+
+        # save colored output
+        fpath_colored = "output_colored.png"
+        Image.fromarray(colored).save(fpath_colored)
 
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
