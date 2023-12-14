@@ -126,30 +126,46 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Local file
             from PIL import Image
             import torchvision.transforms as transforms
+            import numpy as np
+
             _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
             pil_image_gt = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
             depth_numpy_gt = zoe.infer_pil(pil_image_gt)  # as numpy
+            depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
+            depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
 
             pred_image = image.cpu()  # Move to CPU if it's on CUDA
             pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
             depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-            depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
-
-            depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
+            depth_diff = depth_numpy_gt - depth_numpy_pred
 
             # Colorize output
             from zoedepth.utils.misc import colorize
 
             colored_gt = colorize(depth_numpy_gt)
             colored_pred = colorize(depth_numpy_pred)
+            colored_diff = colorize(depth_diff)
 
             # save colored output
+            # Assuming 'tensor' is your (3, 545, 980) tensor
+            # Transpose it to (Height, Width, Channels)
+            tensor_transposed = gt_image.transpose(1, 2, 0)
+
+            # Normalize or scale if necessary
+            # For example, if your tensor has values from 0 to 1
+            tensor_scaled = (tensor_transposed * 255).astype(np.uint8)
+            fpath_colored = "input.png"
+            Image.fromarray(tensor_scaled).save(fpath_colored)
+
             fpath_colored = "output_colored_gt.png"
             Image.fromarray(colored_gt).save(fpath_colored)
 
             fpath_colored = "output_colored_pred.png"
             Image.fromarray(colored_pred).save(fpath_colored)
+
+            fpath_colored = "output_diff.png"
+            Image.fromarray(colored_diff).save(fpath_colored)
             pass
 
         Ll1 = l1_loss(image, gt_image)
