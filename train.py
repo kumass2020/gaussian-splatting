@@ -150,11 +150,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # save colored output
             # Assuming 'tensor' is your (3, 545, 980) tensor
             # Transpose it to (Height, Width, Channels)
-            tensor_transposed = gt_image.transpose(1, 2, 0)
+            tensor_permuted = gt_image.permute(1, 2, 0)  # Rearrange the tensor dimensions
 
             # Normalize or scale if necessary
             # For example, if your tensor has values from 0 to 1
-            tensor_scaled = (tensor_transposed * 255).astype(np.uint8)
+            tensor_numpy = tensor_permuted.cpu().detach().numpy()
+            tensor_scaled = (tensor_numpy * 255).astype(np.uint8)
             fpath_colored = "input.png"
             Image.fromarray(tensor_scaled).save(fpath_colored)
 
