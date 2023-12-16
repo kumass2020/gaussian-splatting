@@ -124,7 +124,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Depth by ZoeDepth
         if iteration % 1000 == 0:
             # Local file
-            from PIL import Image
+            from PIL import Image, ImageDraw, ImageFont
             import torchvision.transforms as transforms
             import numpy as np
 
@@ -138,14 +138,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
             depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-            depth_diff = depth_numpy_gt - depth_numpy_pred
+            depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
 
             # Colorize output
-            from zoedepth.utils.misc import colorize
+            from zoedepth.utils.misc import colorize, colors
 
-            colored_gt = colorize(depth_numpy_gt)
-            colored_pred = colorize(depth_numpy_pred)
-            colored_diff = colorize(depth_diff)
+            colored_gt = colorize(depth_numpy_gt, cmap='Reds_r')
+            colored_pred = colorize(depth_numpy_pred, cmap='Reds_r')
+            colored_diff = colorize(depth_diff, cmap='Reds_r')
 
             # save colored output
             # Assuming 'tensor' is your (3, 545, 980) tensor
@@ -167,6 +167,60 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             fpath_colored = "output_diff.png"
             Image.fromarray(colored_diff).save(fpath_colored)
+
+            # Load the four images
+            image1 = Image.open('output_colored_gt.png')
+            image2 = Image.open('output_colored_pred.png')
+            image3 = Image.open('output_diff.png')
+            image4 = Image.open('input.png')
+
+            # # Assuming all images are the same size, get dimensions of one image
+            # width, height = image1.size
+            #
+            # # Create titles for each image
+            # titles = ["Title 1", "Title 2", "Title 3", "Title 4"]
+            #
+            # # Vertical space for titles
+            # title_space = 40
+            # font_size = 80  # Adjust the size as needed
+            # font = ImageFont.load_default()
+            #
+            # # Create a new empty image with twice the width and height, add extra space for titles
+            # new_im = Image.new('RGB', (width * 2, height * 2 + title_space * 2))
+            #
+            # # Create a drawing context
+            # draw = ImageDraw.Draw(new_im)
+            # font = ImageFont.load_default()  # Load a default font
+            #
+            # # Define a function to paste images and titles
+            # def paste_image_and_title(image, title, position):
+            #     x, y = position
+            #     title_width, title_height = draw.textsize(title, font=font)
+            #     title_x = x + (width - title_width) // 2
+            #     new_im.paste(image, (x, y + title_space))  # Adjust vertical position for title
+            #     draw.text((title_x, y), title, fill="white", font=font, font_size=font_size)
+            #
+            # # Paste images and titles
+            # paste_image_and_title(image1, titles[0], (0, 0))
+            # paste_image_and_title(image2, titles[1], (width, 0))
+            # paste_image_and_title(image3, titles[2], (0, height + title_space))
+            # paste_image_and_title(image4, titles[3], (width, height + title_space))
+
+            # Assuming all images are the same size, get dimensions of one image
+            width, height = image1.size
+
+            # Create a new empty image with twice the width and height
+            new_im = Image.new('RGB', (width * 2, height * 2))
+
+            # Paste the images into the new image
+            new_im.paste(image1, (0, 0))
+            new_im.paste(image2, (width, 0))
+            new_im.paste(image3, (0, height))
+            new_im.paste(image4, (width, height))
+
+            # Save the new image
+            new_im.save('combined_image.png')
+
             pass
 
         Ll1 = l1_loss(image, gt_image)
