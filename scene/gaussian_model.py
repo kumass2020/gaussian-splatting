@@ -18,7 +18,7 @@ import os
 from utils.system_utils import mkdir_p
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import RGB2SH
-from simple_knn._C import distCUDA2
+from simple_knn._C import distCUDA2, getBoxes
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
@@ -138,13 +138,13 @@ class GaussianModel:
         points = np.repeat(pcd.points, 3, axis=0)
         normals = np.repeat(pcd.normals, 3, axis=0)
 
-        # Iterate through the array
-        for i in range(int(points.shape[0] * 2 / 3)):
-            # Sample 3 values from the normal distribution
-            samples = np.random.normal(0, 1, 3)
-
-            # Add these samples to each element of the current row of the array
-            points[i] += samples
+        # # Iterate through the array
+        # for i in range(int(points.shape[0] * 2 / 3)):
+        #     # Sample 3 values from the normal distribution
+        #     samples = np.random.normal(0, 1, 3)
+        #
+        #     # Add these samples to each element of the current row of the array
+        #     points[i] += samples
 
         # # Iterate through the array
         # for i in range(int(normals.shape[0] * 2 / 3)):
@@ -453,3 +453,15 @@ class GaussianModel:
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
+
+    def tensor_to_pcd(self, xyz_parameter):
+        xyz_array = xyz_parameter.detach().cpu().numpy()
+        zeros_array = np.zeros(xyz_parameter.detach().cpu().shape)
+
+        pcd = BasicPointCloud(xyz_array, zeros_array, zeros_array)
+
+        return pcd
+    
+    def get_boxes(self, pcd: BasicPointCloud):
+        box_data = getBoxes(torch.from_numpy(np.asarray(pcd.points)).float().cuda())
+        return box_data

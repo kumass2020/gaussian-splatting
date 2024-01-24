@@ -23,6 +23,7 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -82,6 +83,44 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("")
             print(f"[iteration {iteration}] Number of Gaussians: {gaussians.get_xyz.shape[0]}")
 
+        if iteration % 100 == 0:
+            pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+            box_data = gaussians.get_boxes(pcd)
+            box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+            box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+            box_scale = box_data[:, 6:]  # All rows, last column
+
+            def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+                # Move data to GPU
+                points = points.cuda()
+                min_boundaries = min_boundaries.cuda()
+                max_boundaries = max_boundaries.cuda()
+
+                # Expand dimensions for broadcasting
+                points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+
+                # Check if points are within boundaries
+                within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+                within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+
+                # Both conditions must be true for all coordinates
+                within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+
+                return within_boundaries
+
+            # Checking which points are within which boundaries
+            points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor, box_maxx_tensor)
+
+            # Convert the boolean tensor to an integer tensor
+            points_within_boundaries_int = points_within_boundaries.int()
+
+            # Now apply argmax
+            first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+
+            # For finding all boundary indices for each point
+            all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+                                    range(points_within_boundaries.shape[0])]
+
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
@@ -119,7 +158,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # rgb = gt_image
         # depth = zerodepth_model.forward(rgb, intrinsics)
 
-
         # depth_pred = zerodepth_model(rgb, intrinsics)
 
         # Depth by ZoeDepth
@@ -144,11 +182,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             depth_torch_gt = torch.from_numpy(depth_numpy_gt)
             depth_torch_pred = torch.from_numpy(depth_numpy_pred)
             # 두 텐서 간의 차이 계산
-            depth_diff_torch = depth_torch_gt - depth_torch_pred
+            depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
             depth_diff_torch = depth_diff_torch.to("cuda")
             depth_diff_torch = depth_diff_torch.unsqueeze(0)
             depth_diff_torch = depth_diff_torch.mean()
-
 
             # # Colorize output
             # from zoedepth.utils.misc import colorize, colors
@@ -270,6 +307,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
+
+            # if iteration % 1000 == 0:
+
 
             # Optimizer step
             if iteration < opt.iterations:
