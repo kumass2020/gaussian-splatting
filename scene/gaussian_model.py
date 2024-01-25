@@ -466,3 +466,6 @@ class GaussianModel:
     def get_boxes(self, pcd: BasicPointCloud):
         box_data = getBoxes(torch.from_numpy(np.asarray(pcd.points)).float().cuda())
         return box_data
+    
+    def set_opacity(self, opacity):
+        self._opacity = nn.Parameter(opacity.requires_grad_(True))
