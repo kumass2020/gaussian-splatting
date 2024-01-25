@@ -83,43 +83,66 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("")
             print(f"[iteration {iteration}] Number of Gaussians: {gaussians.get_xyz.shape[0]}")
 
-        # if iteration % 100 == 0:
-        #     pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
-        #     box_data = gaussians.get_boxes(pcd)
-        #     box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
-        #     box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
-        #     box_scale = box_data[:, 6:]  # All rows, last column
+        if iteration % 100 == 0:
+            pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+            box_data = gaussians.get_boxes(pcd)
+            box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+            box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+            box_scale = box_data[:, 6:]  # All rows, last column
 
-        #     def is_point_within_boundaries(points, min_boundaries, max_boundaries):
-        #         # Move data to GPU
-        #         points = points.cuda()
-        #         min_boundaries = min_boundaries.cuda()
-        #         max_boundaries = max_boundaries.cuda()
+            def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+                # Move data to GPU
+                points = points.cuda()
+                min_boundaries = min_boundaries.cuda()
+                max_boundaries = max_boundaries.cuda()
 
-        #         # Expand dimensions for broadcasting
-        #         points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+                # Expand dimensions for broadcasting
+                points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
 
-        #         # Check if points are within boundaries
-        #         within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
-        #         within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+                # Check if points are within boundaries
+                within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+                within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
 
-        #         # Both conditions must be true for all coordinates
-        #         within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+                # Both conditions must be true for all coordinates
+                within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
 
-        #         return within_boundaries
+                return within_boundaries
 
-        #     # Checking which points are within which boundaries
-        #     points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor, box_maxx_tensor)
+            # Checking which points are within which boundaries
+            points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor, box_maxx_tensor)
 
-        #     # Convert the boolean tensor to an integer tensor
-        #     points_within_boundaries_int = points_within_boundaries.int()
+            # Convert the boolean tensor to an integer tensor
+            points_within_boundaries_int = points_within_boundaries.int()
 
-        #     # Now apply argmax
-        #     first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+            # Now apply argmax
+            first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
 
-        #     # For finding all boundary indices for each point
-        #     all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-        #                             range(points_within_boundaries.shape[0])]
+            # For finding all boundary indices for each point
+            all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+                                    range(points_within_boundaries.shape[0])]
+            
+            # # Assuming all_boundary_indices is a list of tensors
+            # # Reshape each tensor in the list to be 1D if it's not already
+            # reshaped_all_boundary_indices = [indices.reshape(-1) for indices in all_boundary_indices]
+
+            # # Now concatenate the reshaped tensors
+            # flat_indices = torch.cat(reshaped_all_boundary_indices)
+
+            # # Create a mask where each element is True if it's equal to 3
+            # mask = (flat_indices == 3)
+
+            # # Count the number of True values in the mask
+            # count_boundary_index_3 = torch.sum(mask).item()
+
+            # # Initialize a variable to store the minimum length
+            # min_length = float('inf')  # Start with infinity
+
+            # # Iterate through all tensors in all_boundary_indices
+            # for indices in all_boundary_indices:
+            #     # Update min_length if the current tensor is smaller
+            #     min_length = min(min_length, indices.numel())
+
+            
 
         # Pick a random Camera
         if not viewpoint_stack:
@@ -160,119 +183,121 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # depth_pred = zerodepth_model(rgb, intrinsics)
 
-        # Depth by ZoeDepth
-        if iteration % 100 == 0:
-            # Local file
-            from PIL import Image, ImageDraw, ImageFont
-            import torchvision.transforms as transforms
-            import numpy as np
+        # # Depth by ZoeDepth
+        # if iteration % 100 == 0:
+        #     # Local file
+        #     from PIL import Image, ImageDraw, ImageFont
+        #     import torchvision.transforms as transforms
+        #     import numpy as np
 
-            _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
-            pil_image_gt = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
-            depth_numpy_gt = zoe.infer_pil(pil_image_gt)  # as numpy
-            depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
-            depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
+        #     _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
+        #     pil_image_gt = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
+        #     depth_numpy_gt = zoe.infer_pil(pil_image_gt)  # as numpy
+        #     depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
+        #     depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
 
-            pred_image = image.cpu()  # Move to CPU if it's on CUDA
-            pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
-            depth_numpy_pred = zoe.infer_pil(pil_image_pred)
+        #     pred_image = image.cpu()  # Move to CPU if it's on CUDA
+        #     pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
+        #     depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-            depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
+        #     depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
 
-            depth_torch_gt = torch.from_numpy(depth_numpy_gt)
-            depth_torch_pred = torch.from_numpy(depth_numpy_pred)
-            # 두 텐서 간의 차이 계산
-            depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
-            depth_diff_torch = depth_diff_torch.to("cuda")
-            depth_diff_torch = depth_diff_torch.unsqueeze(0)
-            depth_diff_torch = depth_diff_torch.mean()
+        #     depth_torch_gt = torch.from_numpy(depth_numpy_gt)
+        #     depth_torch_pred = torch.from_numpy(depth_numpy_pred)
+        #     # 두 텐서 간의 차이 계산
+        #     depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
+        #     depth_diff_torch = depth_diff_torch.to("cuda")
+        #     depth_diff_torch = depth_diff_torch.unsqueeze(0)
+        #     depth_diff_torch = depth_diff_torch.mean()
 
-            # # Colorize output
-            # from zoedepth.utils.misc import colorize, colors
-            #
-            # colored_gt = colorize(depth_numpy_gt, cmap='Reds_r')
-            # colored_pred = colorize(depth_numpy_pred, cmap='Reds_r')
-            # colored_diff = colorize(depth_diff, cmap='Reds_r')
-            #
-            # # save colored output
-            # # Assuming 'tensor' is your (3, 545, 980) tensor
-            # # Transpose it to (Height, Width, Channels)
-            # tensor_permuted = gt_image.permute(1, 2, 0)  # Rearrange the tensor dimensions
-            #
-            # # Normalize or scale if necessary
-            # # For example, if your tensor has values from 0 to 1
-            # tensor_numpy = tensor_permuted.cpu().detach().numpy()
-            # tensor_scaled = (tensor_numpy * 255).astype(np.uint8)
-            # fpath_colored = "input.png"
-            # Image.fromarray(tensor_scaled).save(fpath_colored)
-            #
-            # fpath_colored = "output_colored_gt.png"
-            # Image.fromarray(colored_gt).save(fpath_colored)
-            #
-            # fpath_colored = "output_colored_pred.png"
-            # Image.fromarray(colored_pred).save(fpath_colored)
-            #
-            # fpath_colored = "output_diff.png"
-            # Image.fromarray(colored_diff).save(fpath_colored)
-            #
-            # # Load the four images
-            # image1 = Image.open('output_colored_gt.png')
-            # image2 = Image.open('output_colored_pred.png')
-            # image3 = Image.open('output_diff.png')
-            # image4 = Image.open('input.png')
-            #
-            # # # Assuming all images are the same size, get dimensions of one image
-            # # width, height = image1.size
-            # #
-            # # # Create titles for each image
-            # # titles = ["Title 1", "Title 2", "Title 3", "Title 4"]
-            # #
-            # # # Vertical space for titles
-            # # title_space = 40
-            # # font_size = 80  # Adjust the size as needed
-            # # font = ImageFont.load_default()
-            # #
-            # # # Create a new empty image with twice the width and height, add extra space for titles
-            # # new_im = Image.new('RGB', (width * 2, height * 2 + title_space * 2))
-            # #
-            # # # Create a drawing context
-            # # draw = ImageDraw.Draw(new_im)
-            # # font = ImageFont.load_default()  # Load a default font
-            # #
-            # # # Define a function to paste images and titles
-            # # def paste_image_and_title(image, title, position):
-            # #     x, y = position
-            # #     title_width, title_height = draw.textsize(title, font=font)
-            # #     title_x = x + (width - title_width) // 2
-            # #     new_im.paste(image, (x, y + title_space))  # Adjust vertical position for title
-            # #     draw.text((title_x, y), title, fill="white", font=font, font_size=font_size)
-            # #
-            # # # Paste images and titles
-            # # paste_image_and_title(image1, titles[0], (0, 0))
-            # # paste_image_and_title(image2, titles[1], (width, 0))
-            # # paste_image_and_title(image3, titles[2], (0, height + title_space))
-            # # paste_image_and_title(image4, titles[3], (width, height + title_space))
-            #
-            # # Assuming all images are the same size, get dimensions of one image
-            # width, height = image1.size
-            #
-            # # Create a new empty image with twice the width and height
-            # new_im = Image.new('RGB', (width * 2, height * 2))
-            #
-            # # Paste the images into the new image
-            # new_im.paste(image1, (0, 0))
-            # new_im.paste(image2, (width, 0))
-            # new_im.paste(image3, (0, height))
-            # new_im.paste(image4, (width, height))
-            #
-            # # Save the new image
-            # new_im.save('combined_image.png')
+        #     # # Colorize output
+        #     # from zoedepth.utils.misc import colorize, colors
+        #     #
+        #     # colored_gt = colorize(depth_numpy_gt, cmap='Reds_r')
+        #     # colored_pred = colorize(depth_numpy_pred, cmap='Reds_r')
+        #     # colored_diff = colorize(depth_diff, cmap='Reds_r')
+        #     #
+        #     # # save colored output
+        #     # # Assuming 'tensor' is your (3, 545, 980) tensor
+        #     # # Transpose it to (Height, Width, Channels)
+        #     # tensor_permuted = gt_image.permute(1, 2, 0)  # Rearrange the tensor dimensions
+        #     #
+        #     # # Normalize or scale if necessary
+        #     # # For example, if your tensor has values from 0 to 1
+        #     # tensor_numpy = tensor_permuted.cpu().detach().numpy()
+        #     # tensor_scaled = (tensor_numpy * 255).astype(np.uint8)
+        #     # fpath_colored = "input.png"
+        #     # Image.fromarray(tensor_scaled).save(fpath_colored)
+        #     #
+        #     # fpath_colored = "output_colored_gt.png"
+        #     # Image.fromarray(colored_gt).save(fpath_colored)
+        #     #
+        #     # fpath_colored = "output_colored_pred.png"
+        #     # Image.fromarray(colored_pred).save(fpath_colored)
+        #     #
+        #     # fpath_colored = "output_diff.png"
+        #     # Image.fromarray(colored_diff).save(fpath_colored)
+        #     #
+        #     # # Load the four images
+        #     # image1 = Image.open('output_colored_gt.png')
+        #     # image2 = Image.open('output_colored_pred.png')
+        #     # image3 = Image.open('output_diff.png')
+        #     # image4 = Image.open('input.png')
+        #     #
+        #     # # # Assuming all images are the same size, get dimensions of one image
+        #     # # width, height = image1.size
+        #     # #
+        #     # # # Create titles for each image
+        #     # # titles = ["Title 1", "Title 2", "Title 3", "Title 4"]
+        #     # #
+        #     # # # Vertical space for titles
+        #     # # title_space = 40
+        #     # # font_size = 80  # Adjust the size as needed
+        #     # # font = ImageFont.load_default()
+        #     # #
+        #     # # # Create a new empty image with twice the width and height, add extra space for titles
+        #     # # new_im = Image.new('RGB', (width * 2, height * 2 + title_space * 2))
+        #     # #
+        #     # # # Create a drawing context
+        #     # # draw = ImageDraw.Draw(new_im)
+        #     # # font = ImageFont.load_default()  # Load a default font
+        #     # #
+        #     # # # Define a function to paste images and titles
+        #     # # def paste_image_and_title(image, title, position):
+        #     # #     x, y = position
+        #     # #     title_width, title_height = draw.textsize(title, font=font)
+        #     # #     title_x = x + (width - title_width) // 2
+        #     # #     new_im.paste(image, (x, y + title_space))  # Adjust vertical position for title
+        #     # #     draw.text((title_x, y), title, fill="white", font=font, font_size=font_size)
+        #     # #
+        #     # # # Paste images and titles
+        #     # # paste_image_and_title(image1, titles[0], (0, 0))
+        #     # # paste_image_and_title(image2, titles[1], (width, 0))
+        #     # # paste_image_and_title(image3, titles[2], (0, height + title_space))
+        #     # # paste_image_and_title(image4, titles[3], (width, height + title_space))
+        #     #
+        #     # # Assuming all images are the same size, get dimensions of one image
+        #     # width, height = image1.size
+        #     #
+        #     # # Create a new empty image with twice the width and height
+        #     # new_im = Image.new('RGB', (width * 2, height * 2))
+        #     #
+        #     # # Paste the images into the new image
+        #     # new_im.paste(image1, (0, 0))
+        #     # new_im.paste(image2, (width, 0))
+        #     # new_im.paste(image3, (0, height))
+        #     # new_im.paste(image4, (width, height))
+        #     #
+        #     # # Save the new image
+        #     # new_im.save('combined_image.png')
 
+        # Ll1 = l1_loss(image, gt_image)
+        # if iteration % 100 == 0:
+        #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + depth_diff_torch
+        # else:
+        #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         Ll1 = l1_loss(image, gt_image)
-        if iteration % 100 == 0:
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + depth_diff_torch
-        else:
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         loss.backward()
 
         iter_end.record()
