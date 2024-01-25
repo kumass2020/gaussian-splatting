@@ -11,6 +11,7 @@
 
 import os
 import torch
+import torch.nn.functional as F
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from lpipsPyTorch import lpips
@@ -83,7 +84,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("")
             print(f"[iteration {iteration}] Number of Gaussians: {gaussians.get_xyz.shape[0]}")
 
-        if iteration % 100 == 0:
+        if iteration % 1000 == 0:
             pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
             box_data = gaussians.get_boxes(pcd)
             box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
@@ -142,7 +143,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             #     # Update min_length if the current tensor is smaller
             #     min_length = min(min_length, indices.numel())
 
-            
+            # Create a list of the lengths of each tensor in all_boundary_indices
+            lengths = [indices.numel() for indices in all_boundary_indices]
+
+            # Convert the list of lengths to a PyTorch tensor
+            lengths_tensor = torch.tensor(lengths)
+            lengths_tensor = (F.normalize(lengths_tensor) - 0.5) * 0.1
+            gaussians.get_opacity += lengths_tensor
 
         # Pick a random Camera
         if not viewpoint_stack:
