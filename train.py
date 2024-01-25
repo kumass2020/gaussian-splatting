@@ -149,11 +149,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Convert the list of lengths to a PyTorch tensor
             lengths_tensor = torch.tensor(lengths).float().cuda()  # Ensure it's a floating point tensor
 
-            # Normalize the tensor
-            lengths_tensor = (F.normalize(lengths_tensor.unsqueeze(0), dim=1) - 0.5) * 0.1
-            # lengths_tensor = lengths_tensor.squeeze(0)  # Remove the added dimension
+            # Normalize to [0, 1]
+            min_val = torch.min(lengths_tensor)
+            max_val = torch.max(lengths_tensor)
+            lengths_norm_tensor = (lengths_tensor - min_val) / (max_val - min_val)
 
-            gaussians.set_opacity(gaussians.get_opacity + lengths_tensor.T)
+            # Shift to [-1, 1]
+            lengths_norm_tensor = (lengths_norm_tensor * 2 - 1) * 0.1
+
+            gaussians.set_opacity(gaussians.get_opacity + lengths_norm_tensor.T)
 
         # Pick a random Camera
         if not viewpoint_stack:
