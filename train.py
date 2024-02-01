@@ -25,6 +25,9 @@ from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
+from scene.cameras import Camera
+import numpy as np
+import math
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -152,22 +155,45 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
 
-
-        # ############# FoV #############
-        # viewpoint_cam_fixed = viewpoint_cam
-        # viewpoint_cam_fixed.FoVx = viewpoint_cam_fixed.FoVx / 2.0
-        # viewpoint_cam_fixed.FoVy = viewpoint_cam_fixed.FoVy / 2.0
-        # viewpoint_cam_fixed.projection_matrix = getProjectionMatrix(znear=viewpoint_cam_fixed.znear, zfar=viewpoint_cam_fixed.zfar, fovX=viewpoint_cam_fixed.FoVx, fovY=viewpoint_cam_fixed.FoVy).transpose(0,1).cuda()
-        # viewpoint_cam_fixed.full_proj_transform = (viewpoint_cam_fixed.world_view_transform.unsqueeze(0).bmm(viewpoint_cam_fixed.projection_matrix.unsqueeze(0))).squeeze(0)
-        # render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
-        # fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], \
-        # render_pkg["visibility_filter"], render_pkg["radii"]
-
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
+
+        # ############# FoV #############
+        # # Calculate local translation vector
+        # tx = -math.tan(math.radians(viewpoint_cam.FoVx) / 2.0)
+        # ty = math.tan(math.radians(viewpoint_cam.FoVy) / 2.0)
+        # local_translation = np.array([tx, ty, 0])
+        #
+        # # Transform to global translation
+        # global_translation = viewpoint_cam.R @ local_translation
+        #
+        # viewpoint_cam_fixed = Camera(uid=viewpoint_cam.uid, colmap_id=viewpoint_cam.colmap_id, R=viewpoint_cam.R,
+        #                              T=viewpoint_cam.T, FoVx=viewpoint_cam.FoVx, FoVy=viewpoint_cam.FoVy,
+        #                              image=gt_image, gt_alpha_mask=None, image_name=viewpoint_cam.image_name,
+        #                              trans=global_translation, scale=1.0, data_device="cuda")
+        #
+        # viewpoint_cam_fixed.FoVx = viewpoint_cam_fixed.FoVx / 2.0
+        # viewpoint_cam_fixed.FoVy = viewpoint_cam_fixed.FoVy / 2.0
+        #
+        # # Update camera center
+        # viewpoint_cam_fixed.camera_center = viewpoint_cam_fixed.camera_center.cpu().detach().numpy() + global_translation
+        # viewpoint_cam_fixed.camera_center = torch.from_numpy(viewpoint_cam_fixed.camera_center).float().to('cuda')
+        #
+        # viewpoint_cam_fixed.projection_matrix = getProjectionMatrix(znear=viewpoint_cam_fixed.znear,
+        #                                                             zfar=viewpoint_cam_fixed.zfar,
+        #                                                             fovX=viewpoint_cam_fixed.FoVx,
+        #                                                             fovY=viewpoint_cam_fixed.FoVy).transpose(0,
+        #                                                                                                      1).cuda()
+        # viewpoint_cam_fixed.full_proj_transform = (viewpoint_cam_fixed.world_view_transform.unsqueeze(0).bmm(
+        #     viewpoint_cam_fixed.projection_matrix.unsqueeze(0))).squeeze(0)
+        # render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
+        # fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg[
+        #     "viewspace_points"], \
+        #     render_pkg["visibility_filter"], render_pkg["radii"]
+        # ###############################
 
         # # zerodepth_model = torch.hub.load("TRI-ML/vidar", "ZeroDepth", pretrained=True, trust_repo=True)
         # import vidar.arch.networks.perceiver.ZeroDepthNet as ZeroDepthNet
