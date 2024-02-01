@@ -24,6 +24,7 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -150,6 +151,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
+
+
+        # ############# FoV #############
+        # viewpoint_cam_fixed = viewpoint_cam
+        # viewpoint_cam_fixed.FoVx = viewpoint_cam_fixed.FoVx / 2.0
+        # viewpoint_cam_fixed.FoVy = viewpoint_cam_fixed.FoVy / 2.0
+        # viewpoint_cam_fixed.projection_matrix = getProjectionMatrix(znear=viewpoint_cam_fixed.znear, zfar=viewpoint_cam_fixed.zfar, fovX=viewpoint_cam_fixed.FoVx, fovY=viewpoint_cam_fixed.FoVy).transpose(0,1).cuda()
+        # viewpoint_cam_fixed.full_proj_transform = (viewpoint_cam_fixed.world_view_transform.unsqueeze(0).bmm(viewpoint_cam_fixed.projection_matrix.unsqueeze(0))).squeeze(0)
+        # render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
+        # fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], \
+        # render_pkg["visibility_filter"], render_pkg["radii"]
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
@@ -351,19 +363,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                         return within_boundaries
 
-                    # Checking which points are within which boundaries
-                    points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
-                                                                          box_maxx_tensor)
-
-                    # Convert the boolean tensor to an integer tensor
-                    points_within_boundaries_int = points_within_boundaries.int()
-
-                    # Now apply argmax
-                    first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
-
-                    # For finding all boundary indices for each point
-                    all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-                                            range(points_within_boundaries.shape[0])]
+                    # # Checking which points are within which boundaries
+                    # points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
+                    #                                                       box_maxx_tensor)
+                    #
+                    # # Convert the boolean tensor to an integer tensor
+                    # points_within_boundaries_int = points_within_boundaries.int()
+                    #
+                    # # Now apply argmax
+                    # first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+                    #
+                    # # For finding all boundary indices for each point
+                    # all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+                    #                         range(points_within_boundaries.shape[0])]
 
                     # ############## CSV save ##############
                     # import csv
@@ -386,29 +398,29 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # # Assuming all_boundary_indices is a list of tensors
                     # # Reshape each tensor in the list to be 1D if it's not already
                     # reshaped_all_boundary_indices = [indices.reshape(-1) for indices in all_boundary_indices]
-
+                    #
                     # # Now concatenate the reshaped tensors
                     # flat_indices = torch.cat(reshaped_all_boundary_indices)
-
+                    #
                     # # Create a mask where each element is True if it's equal to 3
                     # mask = (flat_indices == 3)
-
+                    #
                     # # Count the number of True values in the mask
                     # count_boundary_index_3 = torch.sum(mask).item()
-
+                    #
                     # # Initialize a variable to store the minimum length
                     # min_length = float('inf')  # Start with infinity
-
+                    #
                     # # Iterate through all tensors in all_boundary_indices
                     # for indices in all_boundary_indices:
                     #     # Update min_length if the current tensor is smaller
                     #     min_length = min(min_length, indices.numel())
 
-                    # Create a list of the lengths of each tensor in all_boundary_indices
-                    lengths = [indices.numel() for indices in all_boundary_indices]
-
-                    # Convert the list of lengths to a PyTorch tensor
-                    lengths_tensor = torch.tensor(lengths).float().cuda()  # Ensure it's a floating point tensor
+                    # # Create a list of the lengths of each tensor in all_boundary_indices
+                    # lengths = [indices.numel() for indices in all_boundary_indices]
+                    #
+                    # # Convert the list of lengths to a PyTorch tensor
+                    # lengths_tensor = torch.tensor(lengths).float().cuda()  # Ensure it's a floating point tensor
 
                     # ############## opacity ##############
                     # # Normalize to [0, 1]
@@ -421,40 +433,42 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     #
                     # gaussians.set_opacity(gaussians.get_opacity + lengths_norm_tensor.unsqueeze(0).T)
 
-                    ############## prune ##############
-                    box_scale = box_scale.cuda()
-                    min_val = torch.min(box_scale).cuda()
-                    max_val = torch.max(box_scale).cuda()
+                    # ############## prune ##############
+                    # box_scale = box_scale.cuda()
+                    # min_val = torch.min(box_scale).cuda()
+                    # max_val = torch.max(box_scale).cuda()
+                    #
+                    # box_scale_norm_tensor = (box_scale - min_val) / (max_val - min_val)
+                    #
+                    # mean = torch.mean(box_scale_norm_tensor)
+                    # sigma = torch.std(box_scale_norm_tensor)
+                    #
+                    # # Create a boolean mask where the condition is true
+                    # condition = box_scale_norm_tensor > mean + 2 * sigma
+                    #
+                    # # Get indices of elements satisfying the condition
+                    # selected_indices = torch.nonzero(condition, as_tuple=False)[:, 0]
+                    #
+                    # # Step 1: Mask for elements with only one boundary
+                    # bounding_box_num = 1
+                    # one_boundary_mask = torch.tensor([indices.numel() <= bounding_box_num for indices in all_boundary_indices])
+                    #
+                    # # Step 2: Create a mask for each point in all_boundary_indices
+                    # selected_indices_mask_per_point = [torch.any(torch.isin(indices, selected_indices)) for indices in
+                    #                                    all_boundary_indices]
+                    #
+                    # # Convert the list of booleans to a tensor if needed
+                    # selected_indices_mask_per_point_tensor = torch.tensor(selected_indices_mask_per_point)
+                    #
+                    # # Step 3: Combine the masks
+                    # # Since flat_all_boundary_indices is flat, we need to reshape selected_indices_mask to match the shape of one_boundary_mask
+                    # selected_indices_mask_reshaped = selected_indices_mask_per_point_tensor.view(len(all_boundary_indices), -1).any(
+                    #     dim=1)
+                    # final_mask = one_boundary_mask & selected_indices_mask_reshaped
+                    # print(f"\n[iteration {iteration}] Number of Gaussians before pruning: {gaussians.get_xyz.shape[0]}")
+                    # gaussians.prune_points(final_mask)
+                    # print(f"[iteration {iteration}] Number of Gaussians after pruning: {gaussians.get_xyz.shape[0]}")
 
-                    box_scale_norm_tensor = (box_scale - min_val) / (max_val - min_val)
-
-                    mean = torch.mean(box_scale_norm_tensor)
-                    sigma = torch.std(box_scale_norm_tensor)
-
-                    # Create a boolean mask where the condition is true
-                    condition = box_scale_norm_tensor > mean + 2 * sigma
-
-                    # Get indices of elements satisfying the condition
-                    selected_indices = torch.nonzero(condition, as_tuple=False)[:, 0]
-
-                    # Step 1: Mask for elements with only one boundary
-                    one_boundary_mask = torch.tensor([indices.numel() <= 2 for indices in all_boundary_indices])
-
-                    # Step 2: Create a mask for each point in all_boundary_indices
-                    selected_indices_mask_per_point = [torch.any(torch.isin(indices, selected_indices)) for indices in
-                                                       all_boundary_indices]
-
-                    # Convert the list of booleans to a tensor if needed
-                    selected_indices_mask_per_point_tensor = torch.tensor(selected_indices_mask_per_point)
-
-                    # Step 3: Combine the masks
-                    # Since flat_all_boundary_indices is flat, we need to reshape selected_indices_mask to match the shape of one_boundary_mask
-                    selected_indices_mask_reshaped = selected_indices_mask_per_point_tensor.view(len(all_boundary_indices), -1).any(
-                        dim=1)
-                    final_mask = one_boundary_mask & selected_indices_mask_reshaped
-                    print(f"\n[iteration {iteration}] Number of Gaussians before pruning: {gaussians.get_xyz.shape[0]}")
-                    gaussians.prune_points(final_mask)
-                    print(f"[iteration {iteration}] Number of Gaussians after pruning: {gaussians.get_xyz.shape[0]}")
 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
