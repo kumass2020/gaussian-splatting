@@ -36,12 +36,13 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
-    repo = "isl-org/ZoeDepth"
-    # Zoe_N
-    model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
+    # repo = "isl-org/ZoeDepth"
+    # # Zoe_N
+    # model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
+    #
+    # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    # zoe = model_zoe_n.to(DEVICE)
 
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    zoe = model_zoe_n.to(DEVICE)
     # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
@@ -88,44 +89,46 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("")
             print(f"[iteration {iteration}] Number of Gaussians: {gaussians.get_xyz.shape[0]}")
 
-        # pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
-        # box_data = gaussians.get_boxes(pcd)
-        # box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
-        # box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
-        # box_scale = box_data[:, 6:]  # All rows, last column
-        #
-        # def is_point_within_boundaries(points, min_boundaries, max_boundaries):
-        #     # Move data to GPU
-        #     points = points.cuda()
-        #     min_boundaries = min_boundaries.cuda()
-        #     max_boundaries = max_boundaries.cuda()
-        #
-        #     # Expand dimensions for broadcasting
-        #     points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
-        #
-        #     # Check if points are within boundaries
-        #     within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
-        #     within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
-        #
-        #     # Both conditions must be true for all coordinates
-        #     within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
-        #
-        #     return within_boundaries
-        #
-        # # Checking which points are within which boundaries
-        # points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
-        #                                                       box_maxx_tensor)
-        #
-        # # Convert the boolean tensor to an integer tensor
-        # points_within_boundaries_int = points_within_boundaries.int()
-        #
-        # # Now apply argmax
-        # first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
-        #
-        # # For finding all boundary indices for each point
-        # all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-        #                         range(points_within_boundaries.shape[0])]
-        #
+            # ############# Box ##############
+            # pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+            # box_data = gaussians.get_boxes(pcd)
+            # box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+            # box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+            # box_scale = box_data[:, 6:]  # All rows, last column
+            #
+            # def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+            #     # Move data to GPU
+            #     points = points.cuda()
+            #     min_boundaries = min_boundaries.cuda()
+            #     max_boundaries = max_boundaries.cuda()
+            #
+            #     # Expand dimensions for broadcasting
+            #     points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+            #
+            #     # Check if points are within boundaries
+            #     within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+            #     within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+            #
+            #     # Both conditions must be true for all coordinates
+            #     within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+            #
+            #     return within_boundaries
+            #
+            # # Checking which points are within which boundaries
+            # points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
+            #                                                       box_maxx_tensor)
+            #
+            # # Convert the boolean tensor to an integer tensor
+            # points_within_boundaries_int = points_within_boundaries.int()
+            #
+            # # Now apply argmax
+            # first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+            #
+            # # For finding all boundary indices for each point
+            # all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+            #                         range(points_within_boundaries.shape[0])]
+            # ################################
+
         # ############## CSV save ##############
         # import csv
         #
@@ -160,6 +163,42 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
+
+        # ################ Output res ################
+        # viewpoint_cam_fixed = Camera(uid=viewpoint_cam.uid, colmap_id=viewpoint_cam.colmap_id, R=viewpoint_cam.R,
+        #                              T=viewpoint_cam.T, FoVx=viewpoint_cam.FoVx, FoVy=viewpoint_cam.FoVy,
+        #                              image=gt_image, gt_alpha_mask=None, image_name=viewpoint_cam.image_name, scale=1.0,
+        #                              data_device="cuda")
+        #
+        # viewpoint_cam_fixed.image_height = viewpoint_cam.image_height * 2
+        # viewpoint_cam_fixed.image_width = viewpoint_cam.image_width * 2
+        #
+        # render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
+        # fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg[
+        #     "viewspace_points"], \
+        #     render_pkg["visibility_filter"], render_pkg["radii"]
+        #
+        # def crop_image_to_four(image_tensor):
+        #     """
+        #     This function takes an image tensor of shape (3, height, width) and crops it into
+        #     four smaller tensors each of shape (3, height/2, width/2).
+        #     """
+        #     # Assuming the image tensor is in the shape of (3, height, width)
+        #     _, height, width = image_tensor.shape
+        #
+        #     # Calculating the midpoints
+        #     mid_height, mid_width = height // 2, width // 2
+        #
+        #     # Cropping the image into four parts
+        #     top_left = image_tensor[:, :mid_height, :mid_width]
+        #     top_right = image_tensor[:, :mid_height, mid_width:]
+        #     bottom_left = image_tensor[:, mid_height:, :mid_width]
+        #     bottom_right = image_tensor[:, mid_height:, mid_width:]
+        #
+        #     return top_left, top_right, bottom_left, bottom_right
+        #
+        # top_left_image, top_right_image, bottom_left_image, bottom_right_image = crop_image_to_four(fixed_image)
+        # ######################################
 
         # ############# FoV #############
         # # Calculate local translation vector
@@ -364,44 +403,46 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if iteration % 1000 == 0:
                     gaussians.calc_similarity()
 
-                if iteration % 1000 == 0 and iteration < 15000:
-                    pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
-                    box_data = gaussians.get_boxes(pcd)
-                    box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
-                    box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
-                    box_scale = box_data[:, 6:]  # All rows, last column
-
-                    def is_point_within_boundaries(points, min_boundaries, max_boundaries):
-                        # Move data to GPU
-                        points = points.cuda()
-                        min_boundaries = min_boundaries.cuda()
-                        max_boundaries = max_boundaries.cuda()
-
-                        # Expand dimensions for broadcasting
-                        points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
-
-                        # Check if points are within boundaries
-                        within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
-                        within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
-
-                        # Both conditions must be true for all coordinates
-                        within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
-
-                        return within_boundaries
-
-                    # # Checking which points are within which boundaries
-                    # points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
-                    #                                                       box_maxx_tensor)
-                    #
-                    # # Convert the boolean tensor to an integer tensor
-                    # points_within_boundaries_int = points_within_boundaries.int()
-                    #
-                    # # Now apply argmax
-                    # first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
-                    #
-                    # # For finding all boundary indices for each point
-                    # all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-                    #                         range(points_within_boundaries.shape[0])]
+                # ################## box boundary #########################
+                # if iteration % 1000 == 0 and iteration < 15000:
+                #     pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+                #     box_data = gaussians.get_boxes(pcd)
+                #     box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+                #     box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+                #     box_scale = box_data[:, 6:]  # All rows, last column
+                #
+                #     def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+                #         # Move data to GPU
+                #         points = points.cuda()
+                #         min_boundaries = min_boundaries.cuda()
+                #         max_boundaries = max_boundaries.cuda()
+                #
+                #         # Expand dimensions for broadcasting
+                #         points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+                #
+                #         # Check if points are within boundaries
+                #         within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+                #         within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+                #
+                #         # Both conditions must be true for all coordinates
+                #         within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+                #
+                #         return within_boundaries
+                #
+                #     # Checking which points are within which boundaries
+                #     points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
+                #                                                           box_maxx_tensor)
+                #
+                #     # Convert the boolean tensor to an integer tensor
+                #     points_within_boundaries_int = points_within_boundaries.int()
+                #
+                #     # Now apply argmax
+                #     first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+                #
+                #     # For finding all boundary indices for each point
+                #     all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+                #                             range(points_within_boundaries.shape[0])]
+                #     ######################################################
 
                     # ############## CSV save ##############
                     # import csv
@@ -421,6 +462,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     #             # Convert tensor to list and write
                     #             writer.writerow(indices.tolist())
 
+                    # ############## box mask ##############
                     # # Assuming all_boundary_indices is a list of tensors
                     # # Reshape each tensor in the list to be 1D if it's not already
                     # reshaped_all_boundary_indices = [indices.reshape(-1) for indices in all_boundary_indices]
@@ -441,12 +483,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # for indices in all_boundary_indices:
                     #     # Update min_length if the current tensor is smaller
                     #     min_length = min(min_length, indices.numel())
-
+                    #
                     # # Create a list of the lengths of each tensor in all_boundary_indices
                     # lengths = [indices.numel() for indices in all_boundary_indices]
                     #
                     # # Convert the list of lengths to a PyTorch tensor
                     # lengths_tensor = torch.tensor(lengths).float().cuda()  # Ensure it's a floating point tensor
+                    # #####################################
 
                     # ############## opacity ##############
                     # # Normalize to [0, 1]
@@ -455,9 +498,33 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     # lengths_norm_tensor = (lengths_tensor - min_val) / (max_val - min_val)
                     #
                     # # Shift to [-1, 1]
-                    # lengths_norm_tensor = (lengths_norm_tensor * 2 - 1) * 1.0
+                    # lengths_norm_tensor = (lengths_norm_tensor * 2 - 1) * 0.1
                     #
                     # gaussians.set_opacity(gaussians.get_opacity + lengths_norm_tensor.unsqueeze(0).T)
+                    # #####################################
+
+                    # ########## opacity - Beta ##########
+                    # from torch.distributions.beta import Beta
+                    # # Assuming lengths_tensor is already defined and is a tensor
+                    # min_val = torch.min(lengths_tensor).cuda()
+                    # max_val = torch.max(lengths_tensor).cuda()
+                    # lengths_norm_tensor = (lengths_tensor - min_val) / (max_val - min_val)
+                    #
+                    # # Define alpha and beta parameters for the beta distribution
+                    # alpha, beta = 0.5, 0.5  # Example values, change them according to your needs
+                    # beta_distribution = Beta(alpha, beta)
+                    #
+                    # # Sample from the beta distribution
+                    # beta_samples = beta_distribution.sample(lengths_norm_tensor.shape).cuda()
+                    #
+                    # # Now scale these samples to [-1, 1] to match the scaling of lengths_norm_tensor
+                    # beta_samples_scaled = (beta_samples * 2 - 1) * 0.1
+                    #
+                    # print("beta")
+                    #
+                    # # Modify the opacity
+                    # gaussians.set_opacity(gaussians.get_opacity + beta_samples_scaled.unsqueeze(0).T)
+                    # #####################################
 
                     # ############## prune ##############
                     # box_scale = box_scale.cuda()
