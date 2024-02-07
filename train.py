@@ -25,9 +25,12 @@ from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
+from utils.general_utils import PILtoTorch
 from scene.cameras import Camera
 import numpy as np
 import math
+from PIL import Image
+
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -148,9 +151,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #             writer.writerow(indices.tolist())
 
         # Pick a random Camera
-        if not viewpoint_stack:
-            viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        counter = iteration % 5
+        if iteration == 1 or iteration % 5 == 0:
+            if not viewpoint_stack:
+                viewpoint_stack = scene.getTrainCameras().copy()
+            viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        else:
+            pass
 
         # Render
         if (iteration - 1) == debug_from:
@@ -158,47 +165,88 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
 
-        render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        if iteration % 5 == 0:
+            render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
+            image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
 
-        # ################ Output res ################
-        # viewpoint_cam_fixed = Camera(uid=viewpoint_cam.uid, colmap_id=viewpoint_cam.colmap_id, R=viewpoint_cam.R,
-        #                              T=viewpoint_cam.T, FoVx=viewpoint_cam.FoVx, FoVy=viewpoint_cam.FoVy,
-        #                              image=gt_image, gt_alpha_mask=None, image_name=viewpoint_cam.image_name, scale=1.0,
-        #                              data_device="cuda")
-        #
-        # viewpoint_cam_fixed.image_height = viewpoint_cam.image_height * 2
-        # viewpoint_cam_fixed.image_width = viewpoint_cam.image_width * 2
-        #
-        # render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
-        # fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg[
-        #     "viewspace_points"], \
-        #     render_pkg["visibility_filter"], render_pkg["radii"]
-        #
-        # def crop_image_to_four(image_tensor):
-        #     """
-        #     This function takes an image tensor of shape (3, height, width) and crops it into
-        #     four smaller tensors each of shape (3, height/2, width/2).
-        #     """
-        #     # Assuming the image tensor is in the shape of (3, height, width)
-        #     _, height, width = image_tensor.shape
-        #
-        #     # Calculating the midpoints
-        #     mid_height, mid_width = height // 2, width // 2
-        #
-        #     # Cropping the image into four parts
-        #     top_left = image_tensor[:, :mid_height, :mid_width]
-        #     top_right = image_tensor[:, :mid_height, mid_width:]
-        #     bottom_left = image_tensor[:, mid_height:, :mid_width]
-        #     bottom_right = image_tensor[:, mid_height:, mid_width:]
-        #
-        #     return top_left, top_right, bottom_left, bottom_right
-        #
-        # top_left_image, top_right_image, bottom_left_image, bottom_right_image = crop_image_to_four(fixed_image)
-        # ######################################
+        ################ Output res ################
+        def crop_tensor_to_four(image_tensor):
+            """
+            This function takes an image tensor of shape (3, height, width) and crops it into
+            four smaller tensors each of shape (3, height/2, width/2).
+            """
+            # Assuming the image tensor is in the shape of (3, height, width)
+            _, height, width = image_tensor.shape
+
+            # Calculating the midpoints
+            mid_height, mid_width = height // 2, width // 2
+
+            # Cropping the image into four parts
+            top_left = image_tensor[:, :mid_height, :mid_width]
+            top_right = image_tensor[:, :mid_height, mid_width:]
+            bottom_left = image_tensor[:, mid_height:, :mid_width]
+            bottom_right = image_tensor[:, mid_height:, mid_width:]
+
+            return top_left, top_right, bottom_left, bottom_right
+
+        def crop_image_to_four(image):
+            """
+            This function takes a PIL image and crops it into four smaller images.
+            """
+            width, height = image.size
+
+            # Calculating the midpoints
+            mid_width, mid_height = width // 2, height // 2
+
+            # Defining the box coordinates for the four crops
+            top_left_box = (0, 0, mid_width, mid_height)
+            top_right_box = (mid_width, 0, width, mid_height)
+            bottom_left_box = (0, mid_height, mid_width, height)
+            bottom_right_box = (mid_width, mid_height, width, height)
+
+            # Cropping the image into four parts
+            top_left = image.crop(top_left_box)
+            top_right = image.crop(top_right_box)
+            bottom_left = image.crop(bottom_left_box)
+            bottom_right = image.crop(bottom_right_box)
+
+            return top_left, top_right, bottom_left, bottom_right
+
+        # top_left_image, top_right_image, bottom_left_image, bottom_right_image = crop_tensor_to_four(fixed_image)
+
+        if iteration % 5 != 0:
+            sr_image_name = viewpoint_cam.image_name
+            sr_gt_image = Image.open('download/tandt_db/tandt/train/super_resolution/' + sr_image_name + '.jpg')
+            sr_gt_image = [crop_image_to_four(sr_gt_image)][0][counter-1]
+            sr_gt_image = PILtoTorch(sr_gt_image, (viewpoint_cam.image_width, viewpoint_cam.image_height))
+
+            sr_gt_image = sr_gt_image[:3, ...]
+            loaded_mask = None
+
+            if sr_gt_image.shape[1] == 4:
+                loaded_mask = sr_gt_image[3:4, ...]
+
+            sr_gt_image = sr_gt_image.cuda()
+
+            viewpoint_cam_fixed = Camera(uid=viewpoint_cam.uid, colmap_id=viewpoint_cam.colmap_id, R=viewpoint_cam.R,
+                                         T=viewpoint_cam.T, FoVx=viewpoint_cam.FoVx, FoVy=viewpoint_cam.FoVy,
+                                         image=gt_image, gt_alpha_mask=loaded_mask, image_name=viewpoint_cam.image_name, scale=1.0,
+                                         data_device="cuda")
+
+            viewpoint_cam_fixed.image_height = viewpoint_cam.image_height * 2
+            viewpoint_cam_fixed.image_width = viewpoint_cam.image_width * 2
+
+            render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
+            fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg[
+                "viewspace_points"], \
+                render_pkg["visibility_filter"], render_pkg["radii"]
+
+            fixed_image = [crop_tensor_to_four(fixed_image)][0][counter-1]
+        ######################################
+
 
         # ############# FoV #############
         # # Calculate local translation vector
@@ -369,8 +417,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + depth_diff_torch
         # else:
         #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
-        Ll1 = l1_loss(image, gt_image)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+
+        if iteration % 5 != 0:
+            Ll1 = l1_loss(fixed_image, sr_gt_image)
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(fixed_image, sr_gt_image))
+        else:
+            Ll1 = l1_loss(image, gt_image)
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+
+        # Ll1 = l1_loss(image, gt_image)
+        # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+
         loss.backward()
 
         iter_end.record()
