@@ -92,45 +92,45 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("")
             print(f"[iteration {iteration}] Number of Gaussians: {gaussians.get_xyz.shape[0]}")
 
-            # ############# Box ##############
-            # pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
-            # box_data = gaussians.get_boxes(pcd)
-            # box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
-            # box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
-            # box_scale = box_data[:, 6:]  # All rows, last column
-            #
-            # def is_point_within_boundaries(points, min_boundaries, max_boundaries):
-            #     # Move data to GPU
-            #     points = points.cuda()
-            #     min_boundaries = min_boundaries.cuda()
-            #     max_boundaries = max_boundaries.cuda()
-            #
-            #     # Expand dimensions for broadcasting
-            #     points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
-            #
-            #     # Check if points are within boundaries
-            #     within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
-            #     within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
-            #
-            #     # Both conditions must be true for all coordinates
-            #     within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
-            #
-            #     return within_boundaries
-            #
-            # # Checking which points are within which boundaries
-            # points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
-            #                                                       box_maxx_tensor)
-            #
-            # # Convert the boolean tensor to an integer tensor
-            # points_within_boundaries_int = points_within_boundaries.int()
-            #
-            # # Now apply argmax
-            # first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
-            #
-            # # For finding all boundary indices for each point
-            # all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-            #                         range(points_within_boundaries.shape[0])]
-            # ################################
+            ############# Box ##############
+            pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+            box_data = gaussians.get_boxes(pcd)
+            box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+            box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+            box_scale = box_data[:, 6:]  # All rows, last column
+
+            def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+                # Move data to GPU
+                points = points.cuda()
+                min_boundaries = min_boundaries.cuda()
+                max_boundaries = max_boundaries.cuda()
+
+                # Expand dimensions for broadcasting
+                points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+
+                # Check if points are within boundaries
+                within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+                within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+
+                # Both conditions must be true for all coordinates
+                within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+
+                return within_boundaries
+
+            # Checking which points are within which boundaries
+            points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
+                                                                  box_maxx_tensor)
+
+            # Convert the boolean tensor to an integer tensor
+            points_within_boundaries_int = points_within_boundaries.int()
+
+            # Now apply argmax
+            first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+
+            # For finding all boundary indices for each point
+            all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+                                    range(points_within_boundaries.shape[0])]
+            ################################
 
         # ############## CSV save ##############
         # import csv
@@ -150,14 +150,31 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #             # Convert tensor to list and write
         #             writer.writerow(indices.tolist())
 
-        # Pick a random Camera
-        counter = iteration % 5
-        if iteration == 1 or iteration % 5 == 0:
-            if not viewpoint_stack:
-                viewpoint_stack = scene.getTrainCameras().copy()
-            viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
-        else:
-            pass
+
+        # ############# per 5 iterations #############
+        # # Pick a random Camera
+        # counter = iteration % 5
+        # if iteration == 1 or iteration % 5 == 0:
+        #     if not viewpoint_stack:
+        #         viewpoint_stack = scene.getTrainCameras().copy()
+        #     viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        # else:
+        #     pass
+        #
+        # # Render
+        # if (iteration - 1) == debug_from:
+        #     pipe.debug = True
+        #
+        # bg = torch.rand((3), device="cuda") if opt.random_background else background
+        #
+        # if iteration % 5 == 0:
+        #     render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
+        #     image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        # ############################################
+
+        if not viewpoint_stack:
+            viewpoint_stack = scene.getTrainCameras().copy()
+        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
 
         # Render
         if (iteration - 1) == debug_from:
@@ -165,87 +182,87 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
 
-        if iteration % 5 == 0:
-            render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
-            image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
+        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], \
+        render_pkg["visibility_filter"], render_pkg["radii"]
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
 
-        ################ Output res ################
-        def crop_tensor_to_four(image_tensor):
-            """
-            This function takes an image tensor of shape (3, height, width) and crops it into
-            four smaller tensors each of shape (3, height/2, width/2).
-            """
-            # Assuming the image tensor is in the shape of (3, height, width)
-            _, height, width = image_tensor.shape
-
-            # Calculating the midpoints
-            mid_height, mid_width = height // 2, width // 2
-
-            # Cropping the image into four parts
-            top_left = image_tensor[:, :mid_height, :mid_width]
-            top_right = image_tensor[:, :mid_height, mid_width:]
-            bottom_left = image_tensor[:, mid_height:, :mid_width]
-            bottom_right = image_tensor[:, mid_height:, mid_width:]
-
-            return top_left, top_right, bottom_left, bottom_right
-
-        def crop_image_to_four(image):
-            """
-            This function takes a PIL image and crops it into four smaller images.
-            """
-            width, height = image.size
-
-            # Calculating the midpoints
-            mid_width, mid_height = width // 2, height // 2
-
-            # Defining the box coordinates for the four crops
-            top_left_box = (0, 0, mid_width, mid_height)
-            top_right_box = (mid_width, 0, width, mid_height)
-            bottom_left_box = (0, mid_height, mid_width, height)
-            bottom_right_box = (mid_width, mid_height, width, height)
-
-            # Cropping the image into four parts
-            top_left = image.crop(top_left_box)
-            top_right = image.crop(top_right_box)
-            bottom_left = image.crop(bottom_left_box)
-            bottom_right = image.crop(bottom_right_box)
-
-            return top_left, top_right, bottom_left, bottom_right
-
-        # top_left_image, top_right_image, bottom_left_image, bottom_right_image = crop_tensor_to_four(fixed_image)
-
-        if iteration % 5 != 0:
-            sr_image_name = viewpoint_cam.image_name
-            sr_gt_image = Image.open('download/tandt_db/tandt/train/super_resolution/' + sr_image_name + '.jpg')
-            sr_gt_image = [crop_image_to_four(sr_gt_image)][0][counter-1]
-            sr_gt_image = PILtoTorch(sr_gt_image, (viewpoint_cam.image_width, viewpoint_cam.image_height))
-
-            sr_gt_image = sr_gt_image[:3, ...]
-            loaded_mask = None
-
-            if sr_gt_image.shape[1] == 4:
-                loaded_mask = sr_gt_image[3:4, ...]
-
-            sr_gt_image = sr_gt_image.cuda()
-
-            viewpoint_cam_fixed = Camera(uid=viewpoint_cam.uid, colmap_id=viewpoint_cam.colmap_id, R=viewpoint_cam.R,
-                                         T=viewpoint_cam.T, FoVx=viewpoint_cam.FoVx, FoVy=viewpoint_cam.FoVy,
-                                         image=gt_image, gt_alpha_mask=loaded_mask, image_name=viewpoint_cam.image_name, scale=1.0,
-                                         data_device="cuda")
-
-            viewpoint_cam_fixed.image_height = viewpoint_cam.image_height * 2
-            viewpoint_cam_fixed.image_width = viewpoint_cam.image_width * 2
-
-            render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
-            fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg[
-                "viewspace_points"], \
-                render_pkg["visibility_filter"], render_pkg["radii"]
-
-            fixed_image = [crop_tensor_to_four(fixed_image)][0][counter-1]
-        ######################################
+        # ################ Output res ################
+        # def crop_tensor_to_four(image_tensor):
+        #     """
+        #     This function takes an image tensor of shape (3, height, width) and crops it into
+        #     four smaller tensors each of shape (3, height/2, width/2).
+        #     """
+        #     # Assuming the image tensor is in the shape of (3, height, width)
+        #     _, height, width = image_tensor.shape
+        #
+        #     # Calculating the midpoints
+        #     mid_height, mid_width = height // 2, width // 2
+        #
+        #     # Cropping the image into four parts
+        #     top_left = image_tensor[:, :mid_height, :mid_width]
+        #     top_right = image_tensor[:, :mid_height, mid_width:]
+        #     bottom_left = image_tensor[:, mid_height:, :mid_width]
+        #     bottom_right = image_tensor[:, mid_height:, mid_width:]
+        #
+        #     return top_left, top_right, bottom_left, bottom_right
+        #
+        # def crop_image_to_four(image):
+        #     """
+        #     This function takes a PIL image and crops it into four smaller images.
+        #     """
+        #     width, height = image.size
+        #
+        #     # Calculating the midpoints
+        #     mid_width, mid_height = width // 2, height // 2
+        #
+        #     # Defining the box coordinates for the four crops
+        #     top_left_box = (0, 0, mid_width, mid_height)
+        #     top_right_box = (mid_width, 0, width, mid_height)
+        #     bottom_left_box = (0, mid_height, mid_width, height)
+        #     bottom_right_box = (mid_width, mid_height, width, height)
+        #
+        #     # Cropping the image into four parts
+        #     top_left = image.crop(top_left_box)
+        #     top_right = image.crop(top_right_box)
+        #     bottom_left = image.crop(bottom_left_box)
+        #     bottom_right = image.crop(bottom_right_box)
+        #
+        #     return top_left, top_right, bottom_left, bottom_right
+        #
+        # # top_left_image, top_right_image, bottom_left_image, bottom_right_image = crop_tensor_to_four(fixed_image)
+        #
+        # if iteration % 5 != 0:
+        #     sr_image_name = viewpoint_cam.image_name
+        #     sr_gt_image = Image.open('download/tandt_db/tandt/train/super_resolution/' + sr_image_name + '.jpg')
+        #     sr_gt_image = [crop_image_to_four(sr_gt_image)][0][counter-1]
+        #     sr_gt_image = PILtoTorch(sr_gt_image, (viewpoint_cam.image_width, viewpoint_cam.image_height))
+        #
+        #     sr_gt_image = sr_gt_image[:3, ...]
+        #     loaded_mask = None
+        #
+        #     if sr_gt_image.shape[1] == 4:
+        #         loaded_mask = sr_gt_image[3:4, ...]
+        #
+        #     sr_gt_image = sr_gt_image.cuda()
+        #
+        #     viewpoint_cam_fixed = Camera(uid=viewpoint_cam.uid, colmap_id=viewpoint_cam.colmap_id, R=viewpoint_cam.R,
+        #                                  T=viewpoint_cam.T, FoVx=viewpoint_cam.FoVx, FoVy=viewpoint_cam.FoVy,
+        #                                  image=gt_image, gt_alpha_mask=loaded_mask, image_name=viewpoint_cam.image_name, scale=1.0,
+        #                                  data_device="cuda")
+        #
+        #     viewpoint_cam_fixed.image_height = viewpoint_cam.image_height * 2
+        #     viewpoint_cam_fixed.image_width = viewpoint_cam.image_width * 2
+        #
+        #     render_pkg = render(viewpoint_cam_fixed, gaussians, pipe, bg)
+        #     fixed_image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg[
+        #         "viewspace_points"], \
+        #         render_pkg["visibility_filter"], render_pkg["radii"]
+        #
+        #     fixed_image = [crop_tensor_to_four(fixed_image)][0][counter-1]
+        # ######################################
 
 
         # ############# FoV #############
@@ -282,151 +299,137 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         #     render_pkg["visibility_filter"], render_pkg["radii"]
         # ###############################
 
-        # # zerodepth_model = torch.hub.load("TRI-ML/vidar", "ZeroDepth", pretrained=True, trust_repo=True)
-        # import vidar.arch.networks.perceiver.ZeroDepthNet as ZeroDepthNet
-        # import vidar.utils.config as config
-        # # import scene.dataset_readers as dataset_readers
-        # zerodepth_model = ZeroDepthNet.ZeroDepthNet(config.read_config('zerodepth_config.yaml'))
-        #
-        # # Specify the path to your text file
-        # file_path = './download/tandt_db/train/sparse/0'
-        #
-        # # Open the file and read its contents
-        # with open(file_path, 'r') as file:
-        #     content = file.read()
-        #
-        # # Print the contents
-        # print(content)
-        #
-        # intrinsics = torch.tensor(viewpoint_cam.R)
-        # rgb = gt_image
-        # depth = zerodepth_model.forward(rgb, intrinsics)
+        def depth_loss():
+            # Depth by ZoeDepth
+            if iteration % 100 == 0:
+                # Local file
+                from PIL import Image, ImageDraw, ImageFont
+                import torchvision.transforms as transforms
+                import numpy as np
 
-        # depth_pred = zerodepth_model(rgb, intrinsics)
+                _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
+                pil_image_gt = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
+                depth_numpy_gt = zoe.infer_pil(pil_image_gt)  # as numpy
+                depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
+                depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
 
-        # # Depth by ZoeDepth
-        # if iteration % 100 == 0:
-        #     # Local file
-        #     from PIL import Image, ImageDraw, ImageFont
-        #     import torchvision.transforms as transforms
-        #     import numpy as np
+                pred_image = image.cpu()  # Move to CPU if it's on CUDA
+                pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
+                depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-        #     _gt_image = viewpoint_cam.original_image.cpu()  # Move to CPU if it's on CUDA
-        #     pil_image_gt = transforms.ToPILImage()(_gt_image.squeeze(0)).convert("RGB")
-        #     depth_numpy_gt = zoe.infer_pil(pil_image_gt)  # as numpy
-        #     depth_pil = zoe.infer_pil(pil_image_gt, output_type="pil")  # as 16-bit PIL Image
-        #     depth_tensor = zoe.infer_pil(pil_image_gt, output_type="tensor")  # as torch tensor
+                depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
 
-        #     pred_image = image.cpu()  # Move to CPU if it's on CUDA
-        #     pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
-        #     depth_numpy_pred = zoe.infer_pil(pil_image_pred)
+                depth_torch_gt = torch.from_numpy(depth_numpy_gt)
+                depth_torch_pred = torch.from_numpy(depth_numpy_pred)
+                # 두 텐서 간의 차이 계산
+                depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
+                depth_diff_torch = depth_diff_torch.to("cuda")
+                depth_diff_torch = depth_diff_torch.unsqueeze(0)
+                depth_diff_torch = depth_diff_torch.mean()
 
-        #     depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
+                # # Colorize output
+                # from zoedepth.utils.misc import colorize, colors
+                #
+                # colored_gt = colorize(depth_numpy_gt, cmap='Reds_r')
+                # colored_pred = colorize(depth_numpy_pred, cmap='Reds_r')
+                # colored_diff = colorize(depth_diff, cmap='Reds_r')
+                #
+                # # save colored output
+                # # Assuming 'tensor' is your (3, 545, 980) tensor
+                # # Transpose it to (Height, Width, Channels)
+                # tensor_permuted = gt_image.permute(1, 2, 0)  # Rearrange the tensor dimensions
+                #
+                # # Normalize or scale if necessary
+                # # For example, if your tensor has values from 0 to 1
+                # tensor_numpy = tensor_permuted.cpu().detach().numpy()
+                # tensor_scaled = (tensor_numpy * 255).astype(np.uint8)
+                # fpath_colored = "input.png"
+                # Image.fromarray(tensor_scaled).save(fpath_colored)
+                #
+                # fpath_colored = "output_colored_gt.png"
+                # Image.fromarray(colored_gt).save(fpath_colored)
+                #
+                # fpath_colored = "output_colored_pred.png"
+                # Image.fromarray(colored_pred).save(fpath_colored)
+                #
+                # fpath_colored = "output_diff.png"
+                # Image.fromarray(colored_diff).save(fpath_colored)
+                #
+                # # Load the four images
+                # image1 = Image.open('output_colored_gt.png')
+                # image2 = Image.open('output_colored_pred.png')
+                # image3 = Image.open('output_diff.png')
+                # image4 = Image.open('input.png')
+                #
+                # # # Assuming all images are the same size, get dimensions of one image
+                # # width, height = image1.size
+                # #
+                # # # Create titles for each image
+                # # titles = ["Title 1", "Title 2", "Title 3", "Title 4"]
+                # #
+                # # # Vertical space for titles
+                # # title_space = 40
+                # # font_size = 80  # Adjust the size as needed
+                # # font = ImageFont.load_default()
+                # #
+                # # # Create a new empty image with twice the width and height, add extra space for titles
+                # # new_im = Image.new('RGB', (width * 2, height * 2 + title_space * 2))
+                # #
+                # # # Create a drawing context
+                # # draw = ImageDraw.Draw(new_im)
+                # # font = ImageFont.load_default()  # Load a default font
+                # #
+                # # # Define a function to paste images and titles
+                # # def paste_image_and_title(image, title, position):
+                # #     x, y = position
+                # #     title_width, title_height = draw.textsize(title, font=font)
+                # #     title_x = x + (width - title_width) // 2
+                # #     new_im.paste(image, (x, y + title_space))  # Adjust vertical position for title
+                # #     draw.text((title_x, y), title, fill="white", font=font, font_size=font_size)
+                # #
+                # # # Paste images and titles
+                # # paste_image_and_title(image1, titles[0], (0, 0))
+                # # paste_image_and_title(image2, titles[1], (width, 0))
+                # # paste_image_and_title(image3, titles[2], (0, height + title_space))
+                # # paste_image_and_title(image4, titles[3], (width, height + title_space))
+                #
+                # # Assuming all images are the same size, get dimensions of one image
+                # width, height = image1.size
+                #
+                # # Create a new empty image with twice the width and height
+                # new_im = Image.new('RGB', (width * 2, height * 2))
+                #
+                # # Paste the images into the new image
+                # new_im.paste(image1, (0, 0))
+                # new_im.paste(image2, (width, 0))
+                # new_im.paste(image3, (0, height))
+                # new_im.paste(image4, (width, height))
+                #
+                # # Save the new image
+                # new_im.save('combined_image.png')
 
-        #     depth_torch_gt = torch.from_numpy(depth_numpy_gt)
-        #     depth_torch_pred = torch.from_numpy(depth_numpy_pred)
-        #     # 두 텐서 간의 차이 계산
-        #     depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
-        #     depth_diff_torch = depth_diff_torch.to("cuda")
-        #     depth_diff_torch = depth_diff_torch.unsqueeze(0)
-        #     depth_diff_torch = depth_diff_torch.mean()
+                ############## depth loss ##############
+                Ll1 = l1_loss(image, gt_image)
+                if iteration % 100 == 0:
+                    loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + depth_diff_torch
+            else:
+                loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-        #     # # Colorize output
-        #     # from zoedepth.utils.misc import colorize, colors
-        #     #
-        #     # colored_gt = colorize(depth_numpy_gt, cmap='Reds_r')
-        #     # colored_pred = colorize(depth_numpy_pred, cmap='Reds_r')
-        #     # colored_diff = colorize(depth_diff, cmap='Reds_r')
-        #     #
-        #     # # save colored output
-        #     # # Assuming 'tensor' is your (3, 545, 980) tensor
-        #     # # Transpose it to (Height, Width, Channels)
-        #     # tensor_permuted = gt_image.permute(1, 2, 0)  # Rearrange the tensor dimensions
-        #     #
-        #     # # Normalize or scale if necessary
-        #     # # For example, if your tensor has values from 0 to 1
-        #     # tensor_numpy = tensor_permuted.cpu().detach().numpy()
-        #     # tensor_scaled = (tensor_numpy * 255).astype(np.uint8)
-        #     # fpath_colored = "input.png"
-        #     # Image.fromarray(tensor_scaled).save(fpath_colored)
-        #     #
-        #     # fpath_colored = "output_colored_gt.png"
-        #     # Image.fromarray(colored_gt).save(fpath_colored)
-        #     #
-        #     # fpath_colored = "output_colored_pred.png"
-        #     # Image.fromarray(colored_pred).save(fpath_colored)
-        #     #
-        #     # fpath_colored = "output_diff.png"
-        #     # Image.fromarray(colored_diff).save(fpath_colored)
-        #     #
-        #     # # Load the four images
-        #     # image1 = Image.open('output_colored_gt.png')
-        #     # image2 = Image.open('output_colored_pred.png')
-        #     # image3 = Image.open('output_diff.png')
-        #     # image4 = Image.open('input.png')
-        #     #
-        #     # # # Assuming all images are the same size, get dimensions of one image
-        #     # # width, height = image1.size
-        #     # #
-        #     # # # Create titles for each image
-        #     # # titles = ["Title 1", "Title 2", "Title 3", "Title 4"]
-        #     # #
-        #     # # # Vertical space for titles
-        #     # # title_space = 40
-        #     # # font_size = 80  # Adjust the size as needed
-        #     # # font = ImageFont.load_default()
-        #     # #
-        #     # # # Create a new empty image with twice the width and height, add extra space for titles
-        #     # # new_im = Image.new('RGB', (width * 2, height * 2 + title_space * 2))
-        #     # #
-        #     # # # Create a drawing context
-        #     # # draw = ImageDraw.Draw(new_im)
-        #     # # font = ImageFont.load_default()  # Load a default font
-        #     # #
-        #     # # # Define a function to paste images and titles
-        #     # # def paste_image_and_title(image, title, position):
-        #     # #     x, y = position
-        #     # #     title_width, title_height = draw.textsize(title, font=font)
-        #     # #     title_x = x + (width - title_width) // 2
-        #     # #     new_im.paste(image, (x, y + title_space))  # Adjust vertical position for title
-        #     # #     draw.text((title_x, y), title, fill="white", font=font, font_size=font_size)
-        #     # #
-        #     # # # Paste images and titles
-        #     # # paste_image_and_title(image1, titles[0], (0, 0))
-        #     # # paste_image_and_title(image2, titles[1], (width, 0))
-        #     # # paste_image_and_title(image3, titles[2], (0, height + title_space))
-        #     # # paste_image_and_title(image4, titles[3], (width, height + title_space))
-        #     #
-        #     # # Assuming all images are the same size, get dimensions of one image
-        #     # width, height = image1.size
-        #     #
-        #     # # Create a new empty image with twice the width and height
-        #     # new_im = Image.new('RGB', (width * 2, height * 2))
-        #     #
-        #     # # Paste the images into the new image
-        #     # new_im.paste(image1, (0, 0))
-        #     # new_im.paste(image2, (width, 0))
-        #     # new_im.paste(image3, (0, height))
-        #     # new_im.paste(image4, (width, height))
-        #     #
-        #     # # Save the new image
-        #     # new_im.save('combined_image.png')
+            return loss
 
-        # Ll1 = l1_loss(image, gt_image)
-        # if iteration % 100 == 0:
-        #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + depth_diff_torch
+        # loss = depth_loss()
+
+        # ############## SR loss ##############
+        # if iteration % 5 != 0:
+        #     Ll1 = l1_loss(fixed_image, sr_gt_image)
+        #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(fixed_image, sr_gt_image))
         # else:
+        #     Ll1 = l1_loss(image, gt_image)
         #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
-        if iteration % 5 != 0:
-            Ll1 = l1_loss(fixed_image, sr_gt_image)
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(fixed_image, sr_gt_image))
-        else:
-            Ll1 = l1_loss(image, gt_image)
-            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
-
-        # Ll1 = l1_loss(image, gt_image)
-        # loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        ############## vanilla loss ##############
+        Ll1 = l1_loss(image, gt_image)
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
         loss.backward()
 
@@ -460,64 +463,86 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if iteration % 1000 == 0:
                     gaussians.calc_similarity()
 
-                # ################## box boundary #########################
-                # if iteration % 1000 == 0 and iteration < 15000:
-                #     pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
-                #     box_data = gaussians.get_boxes(pcd)
-                #     box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
-                #     box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
-                #     box_scale = box_data[:, 6:]  # All rows, last column
-                #
-                #     def is_point_within_boundaries(points, min_boundaries, max_boundaries):
-                #         # Move data to GPU
-                #         points = points.cuda()
-                #         min_boundaries = min_boundaries.cuda()
-                #         max_boundaries = max_boundaries.cuda()
-                #
-                #         # Expand dimensions for broadcasting
-                #         points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
-                #
-                #         # Check if points are within boundaries
-                #         within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
-                #         within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
-                #
-                #         # Both conditions must be true for all coordinates
-                #         within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
-                #
-                #         return within_boundaries
-                #
-                #     # Checking which points are within which boundaries
-                #     points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
-                #                                                           box_maxx_tensor)
-                #
-                #     # Convert the boolean tensor to an integer tensor
-                #     points_within_boundaries_int = points_within_boundaries.int()
-                #
-                #     # Now apply argmax
-                #     first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
-                #
-                #     # For finding all boundary indices for each point
-                #     all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-                #                             range(points_within_boundaries.shape[0])]
-                #     ######################################################
 
-                    # ############## CSV save ##############
-                    # import csv
-                    #
-                    # # Define the CSV file name
-                    # csv_file_name = 'all_boundary_indices.csv'
-                    #
-                    # # Write the list of indices to the CSV file
-                    # with open(csv_file_name, 'w', newline='') as file:
-                    #     writer = csv.writer(file)
-                    #     for indices in all_boundary_indices:
-                    #         # Check if indices is a tensor with just one element
-                    #         if torch.numel(indices) == 1:
-                    #             # Write a single element tensor as a one-element list
-                    #             writer.writerow([indices.item()])
-                    #         else:
-                    #             # Convert tensor to list and write
-                    #             writer.writerow(indices.tolist())
+                def get_box_boundary():
+                    ################## box boundary #########################
+                    if iteration % 1000 == 0 and iteration < 15000:
+                        pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+                        box_data = gaussians.get_boxes(pcd)
+                        box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+                        box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+                        box_scale = box_data[:, 6:]  # All rows, last column
+
+                        def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+                            # Move data to GPU
+                            points = points.cuda()
+                            min_boundaries = min_boundaries.cuda()
+                            max_boundaries = max_boundaries.cuda()
+
+                            # Expand dimensions for broadcasting
+                            points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+
+                            # Check if points are within boundaries
+                            within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+                            within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+
+                            # Both conditions must be true for all coordinates
+                            within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+
+                            return within_boundaries
+
+                        # Checking which points are within which boundaries
+                        points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
+                                                                              box_maxx_tensor)
+
+                        # Convert the boolean tensor to an integer tensor
+                        points_within_boundaries_int = points_within_boundaries.int()
+
+                        # Now apply argmax
+                        first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+
+                        # For finding all boundary indices for each point
+                        all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+                                                range(points_within_boundaries.shape[0])]
+
+                        return all_boundary_indices
+                    ######################################################
+                # all_boundary_indices = get_box_boundary()
+
+                def prune_points_most_boxes():
+                    ############## points pruning with most boxes ##############
+                    # Step 1: Mask for elements with only {bounding_box_num} boundary
+                    bounding_box_num = max(
+                        (sub_tensor.size(0) for sub_tensor in all_boundary_indices if sub_tensor.dim() > 0), default=0)
+                    # bounding_box_num = 0
+                    one_boundary_mask = torch.tensor(
+                        [indices.numel() == bounding_box_num for indices in all_boundary_indices])
+
+                    print(f"\n[iteration {iteration}] Number of Gaussians before pruning: {gaussians.get_xyz.shape[0]}")
+                    gaussians.prune_points(one_boundary_mask)
+                    print(f"[iteration {iteration}] Number of Gaussians after pruning: {gaussians.get_xyz.shape[0]}")
+                    ############################################################
+                # prune_points_most_boxes()
+
+                def box_indices_to_csv():
+                    ############## CSV save ##############
+                    import csv
+
+                    # Define the CSV file name
+                    csv_file_name = 'all_boundary_indices.csv'
+
+                    # Write the list of indices to the CSV file
+                    with open(csv_file_name, 'w', newline='') as file:
+                        writer = csv.writer(file)
+                        for indices in all_boundary_indices:
+                            # Check if indices is a tensor with just one element
+                            if torch.numel(indices) == 1:
+                                # Write a single element tensor as a one-element list
+                                writer.writerow([indices.item()])
+                            else:
+                                # Convert tensor to list and write
+                                writer.writerow(indices.tolist())
+                # box_indices_to_csv()
 
                     # ############## box mask ##############
                     # # Assuming all_boundary_indices is a list of tensors
@@ -701,6 +726,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
             tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         torch.cuda.empty_cache()
 
+
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
@@ -716,6 +742,8 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    # parser.add_argument("--augment_points", type=bool, default = False)
+    # parser.add_argument("--depth_loss", type=bool, default=False)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
