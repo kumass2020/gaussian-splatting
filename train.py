@@ -321,8 +321,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
                 depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-                # depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
-
                 depth_torch_gt = torch.from_numpy(depth_numpy_gt)
                 depth_torch_pred = torch.from_numpy(depth_numpy_pred)
 
@@ -656,22 +654,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
-            ################## Merge ##################
-            if iteration % 300 == 0 and iteration >= 12000:
-                print('before merge')
-                print(gaussians.get_xyz.shape[0])
+                ################## Merge ##################
+                # Densification
+                if iteration % 300 == 0 and 5000 <= iteration <= 12000:
+                    print('before merge')
+                    print(gaussians.get_xyz.shape[0])
 
-                dst_thh = sum((torch.max(gaussians.get_xyz, dim=0)[0] - torch.min(gaussians.get_xyz, dim=0)[0])) / \
-                          gaussians.get_xyz.shape[0] / gaussians.get_xyz.shape[1]
-                cov_thh = sum((torch.max(gaussians.get_covariance(), dim=0)[0] -
-                               torch.min(gaussians.get_covariance(), dim=0)[0])) / gaussians.get_covariance().shape[
-                              0] / gaussians.get_covariance().shape[1]
+                    dst_thh = sum((torch.max(gaussians.get_xyz, dim=0)[0] - torch.min(gaussians.get_xyz, dim=0)[0])) / \
+                              gaussians.get_xyz.shape[0] / gaussians.get_xyz.shape[1]
+                    cov_thh = sum((torch.max(gaussians.get_covariance(), dim=0)[0] -
+                                   torch.min(gaussians.get_covariance(), dim=0)[0])) / gaussians.get_covariance().shape[
+                                  0] / gaussians.get_covariance().shape[1]
 
-                gaussians.densify_and_merge(dst_thh, cov_thh)
+                    gaussians.densify_and_merge(dst_thh, cov_thh)
 
-                print('after merge')
-                print(gaussians.get_xyz.shape[0])
-            ###########################################
+                    print('after merge')
+                    print(gaussians.get_xyz.shape[0])
+                ###########################################
 
 
             # Optimizer step

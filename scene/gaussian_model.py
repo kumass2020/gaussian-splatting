@@ -488,7 +488,7 @@ class GaussianModel:
         g_rotation = self._rotation.clone()
         g_opacity = self._opacity.clone()
 
-        for i in tqdm(range(len(g_xyz))):
+        for i in tqdm(range(len(g_xyz)-1)):
             if torch.isnan(g_xyz[i][0]):
                 continue
 
