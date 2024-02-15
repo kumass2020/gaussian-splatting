@@ -39,14 +39,18 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
-    # repo = "isl-org/ZoeDepth"
-    # # Zoe_N
-    # model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
-    #
-    # DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    # zoe = model_zoe_n.to(DEVICE)
+    def load_zoe_depth():
+        repo = "isl-org/ZoeDepth"
+        # Zoe_N
+        model_zoe_n = torch.hub.load(repo, "ZoeD_N", pretrained=True)
 
-    # torch.hub.help("intel-isl/MiDaS", "DPT_BEiT_L_384", force_reload=True)  # Triggers fresh download of MiDaS repo
+        DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+        zoe = model_zoe_n.to(DEVICE)
+
+        return zoe
+
+    zoe = load_zoe_depth()
+
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -92,45 +96,45 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("")
             print(f"[iteration {iteration}] Number of Gaussians: {gaussians.get_xyz.shape[0]}")
 
-            ############# Box ##############
-            pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
-            box_data = gaussians.get_boxes(pcd)
-            box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
-            box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
-            box_scale = box_data[:, 6:]  # All rows, last column
-
-            def is_point_within_boundaries(points, min_boundaries, max_boundaries):
-                # Move data to GPU
-                points = points.cuda()
-                min_boundaries = min_boundaries.cuda()
-                max_boundaries = max_boundaries.cuda()
-
-                # Expand dimensions for broadcasting
-                points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
-
-                # Check if points are within boundaries
-                within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
-                within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
-
-                # Both conditions must be true for all coordinates
-                within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
-
-                return within_boundaries
-
-            # Checking which points are within which boundaries
-            points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
-                                                                  box_maxx_tensor)
-
-            # Convert the boolean tensor to an integer tensor
-            points_within_boundaries_int = points_within_boundaries.int()
-
-            # Now apply argmax
-            first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
-
-            # For finding all boundary indices for each point
-            all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
-                                    range(points_within_boundaries.shape[0])]
-            ################################
+            # ############# Box ##############
+            # pcd = gaussians.tensor_to_pcd(gaussians.get_xyz)
+            # box_data = gaussians.get_boxes(pcd)
+            # box_minn_tensor = box_data[:, :3]  # All rows, first 3 columns
+            # box_maxx_tensor = box_data[:, 3:6]  # All rows, columns 3 to 5
+            # box_scale = box_data[:, 6:]  # All rows, last column
+            #
+            # def is_point_within_boundaries(points, min_boundaries, max_boundaries):
+            #     # Move data to GPU
+            #     points = points.cuda()
+            #     min_boundaries = min_boundaries.cuda()
+            #     max_boundaries = max_boundaries.cuda()
+            #
+            #     # Expand dimensions for broadcasting
+            #     points_expanded = points.unsqueeze(1)  # Shape: [num_points, 1, 3]
+            #
+            #     # Check if points are within boundaries
+            #     within_min = points_expanded >= min_boundaries  # Shape: [num_points, num_boundaries, 3]
+            #     within_max = points_expanded <= max_boundaries  # Shape: [num_points, num_boundaries, 3]
+            #
+            #     # Both conditions must be true for all coordinates
+            #     within_boundaries = torch.all(within_min & within_max, dim=2)  # Shape: [num_points, num_boundaries]
+            #
+            #     return within_boundaries
+            #
+            # # Checking which points are within which boundaries
+            # points_within_boundaries = is_point_within_boundaries(gaussians.get_xyz, box_minn_tensor,
+            #                                                       box_maxx_tensor)
+            #
+            # # Convert the boolean tensor to an integer tensor
+            # points_within_boundaries_int = points_within_boundaries.int()
+            #
+            # # Now apply argmax
+            # first_boundary_indices = torch.argmax(points_within_boundaries_int, dim=1)
+            #
+            # # For finding all boundary indices for each point
+            # all_boundary_indices = [torch.nonzero(points_within_boundaries[i]).squeeze() for i in
+            #                         range(points_within_boundaries.shape[0])]
+            # ################################
 
         # ############## CSV save ##############
         # import csv
@@ -317,12 +321,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 pil_image_pred = transforms.ToPILImage()(pred_image.squeeze(0)).convert("RGB")
                 depth_numpy_pred = zoe.infer_pil(pil_image_pred)
 
-                depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
+                # depth_diff = abs(depth_numpy_gt - depth_numpy_pred)
 
                 depth_torch_gt = torch.from_numpy(depth_numpy_gt)
                 depth_torch_pred = torch.from_numpy(depth_numpy_pred)
+
                 # 두 텐서 간의 차이 계산
-                depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
+                # depth_diff_torch = abs(depth_torch_gt - depth_torch_pred)
+                depth_diff_torch = depth_torch_gt - depth_torch_pred
+
                 depth_diff_torch = depth_diff_torch.to("cuda")
                 depth_diff_torch = depth_diff_torch.unsqueeze(0)
                 depth_diff_torch = depth_diff_torch.mean()
@@ -408,16 +415,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # # Save the new image
                 # new_im.save('combined_image.png')
 
-                ############## depth loss ##############
-                Ll1 = l1_loss(image, gt_image)
                 if iteration % 100 == 0:
+                    Ll1 = l1_loss(image, gt_image)
                     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + depth_diff_torch
             else:
+                Ll1 = l1_loss(image, gt_image)
                 loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
 
             return loss
-
-        # loss = depth_loss()
 
         # ############## SR loss ##############
         # if iteration % 5 != 0:
@@ -430,6 +435,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ############## vanilla loss ##############
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+
+        # depth loss
+        loss = depth_loss()
 
         loss.backward()
 
@@ -460,8 +468,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
-                if iteration % 1000 == 0:
-                    gaussians.calc_similarity()
+                # if iteration % 1000 == 0:
+                #     gaussians.calc_similarity()
 
 
                 def get_box_boundary():
@@ -509,7 +517,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     ######################################################
                 # all_boundary_indices = get_box_boundary()
 
-                def prune_points_most_boxes():
+                def prune_points_most_boxes(all_boundary_indices):
                     ############## points pruning with most boxes ##############
                     # Step 1: Mask for elements with only {bounding_box_num} boundary
                     bounding_box_num = max(
@@ -522,9 +530,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     gaussians.prune_points(one_boundary_mask)
                     print(f"[iteration {iteration}] Number of Gaussians after pruning: {gaussians.get_xyz.shape[0]}")
                     ############################################################
-                # prune_points_most_boxes()
+                # prune_points_most_boxes(all_boundary_indices)
 
-                def box_indices_to_csv():
+                def box_indices_to_csv(all_boundary_indices):
                     ############## CSV save ##############
                     import csv
 
@@ -542,7 +550,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                             else:
                                 # Convert tensor to list and write
                                 writer.writerow(indices.tolist())
-                # box_indices_to_csv()
+                # box_indices_to_csv(all_boundary_indices)
 
                     # ############## box mask ##############
                     # # Assuming all_boundary_indices is a list of tensors
@@ -648,7 +656,22 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
 
-            # if iteration % 1000 == 0:
+            ################## Merge ##################
+            if iteration % 300 == 0 and iteration >= 12000:
+                print('before merge')
+                print(gaussians.get_xyz.shape[0])
+
+                dst_thh = sum((torch.max(gaussians.get_xyz, dim=0)[0] - torch.min(gaussians.get_xyz, dim=0)[0])) / \
+                          gaussians.get_xyz.shape[0] / gaussians.get_xyz.shape[1]
+                cov_thh = sum((torch.max(gaussians.get_covariance(), dim=0)[0] -
+                               torch.min(gaussians.get_covariance(), dim=0)[0])) / gaussians.get_covariance().shape[
+                              0] / gaussians.get_covariance().shape[1]
+
+                gaussians.densify_and_merge(dst_thh, cov_thh)
+
+                print('after merge')
+                print(gaussians.get_xyz.shape[0])
+            ###########################################
 
 
             # Optimizer step
