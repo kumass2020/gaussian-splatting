@@ -535,3 +535,42 @@ class GaussianModel:
         print(self._xyz.shape)
 
         # self.dens
+
+    def flatten_gaussians(self):
+        for i in range(len(self._xyz)):
+            # scales = self._scaling[i].detach()
+            # scales_min_idx = torch.argmin(scales)
+            # scales = self._scaling.clone()
+            scales_min_idx = torch.argmin(self.get_scaling[i])
+
+            a = self._scaling[i][scales_min_idx]
+            b = self.scaling_inverse_activation(
+                self.get_scaling[i][scales_min_idx] / torch.sum(self.get_scaling[i])
+            )
+            a_scaled = self.get_scaling[i][scales_min_idx]
+            b_scaled = self.get_scaling[i][scales_min_idx] / torch.sum(self.get_scaling[i])
+
+            # self._scaling[i][scales_min_idx] = self.scaling_inverse_activation(
+            #     self.get_scaling[i][scales_min_idx] / torch.sum(self.get_scaling[i])
+            # )
+
+            self._scaling[i][scales_min_idx] = self.scaling_inverse_activation(
+                self.get_scaling[i][scales_min_idx] / 10
+            )
+
+            # self._scaling[i][scales_min_idx] = scales[i][scales_min_idx] / torch.sum(scales[i])
+
+        # optimizable_tensors = self.cat_tensors_to_optimizer(d)
+        # self._xyz = optimizable_tensors["xyz"]
+        # self._features_dc = optimizable_tensors["f_dc"]
+        # self._features_rest = optimizable_tensors["f_rest"]
+        # self._opacity = optimizable_tensors["opacity"]
+        # self._scaling = optimizable_tensors["scaling"]
+        # self._rotation = optimizable_tensors["rotation"]
+        #
+        # self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        # self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        # self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+
+        print("\nGaussians flattened.")
+        print("memory:", torch.cuda.memory_allocated() / 1024 / 1024)

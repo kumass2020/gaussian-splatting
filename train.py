@@ -377,6 +377,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ############## vanilla loss ##############
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss *= 0.2
 
         # # depth loss
         # loss = depth_loss()
@@ -413,23 +414,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # if iteration % 1000 == 0:
                 #     gaussians.calc_similarity()
 
-                ################## Box Guidance ##################
-                if iteration % 1000 == 0 and iteration < 15000:
-                    box_gd.get_box_boundary(iteration)
-
-                    # 선택적
-                    # box_gd.prune_points_most_boxes(iteration)
-                    # box_gd.box_indices_to_csv()
-
-                    box_gd.mask_box()
-
-                    # 선택적
-                    # box_gd.prune_opacity()
-                    # box_gd.prune_opacity_beta()
-                    box_gd.prune_points_least_boxes(iteration)
-
-                if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
-                    gaussians.reset_opacity()
+                # ################## Box Guidance ##################
+                # if iteration % 1000 == 0 and iteration < 15000:
+                #     box_gd.get_box_boundary(iteration)
+                #
+                #     # 선택적
+                #     # box_gd.prune_points_most_boxes(iteration)
+                #     # box_gd.box_indices_to_csv()
+                #
+                #     box_gd.mask_box()
+                #
+                #     # 선택적
+                #     # box_gd.prune_opacity()
+                #     # box_gd.prune_opacity_beta()
+                #     box_gd.prune_points_least_boxes(iteration)
+                #
+                # if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
+                #     gaussians.reset_opacity()
 
                 # ################## Merge ##################
                 # # Densification
