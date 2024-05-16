@@ -554,8 +554,17 @@ class GaussianModel:
             #     self.get_scaling[i][scales_min_idx] / torch.sum(self.get_scaling[i])
             # )
 
+            ## divided by 10
+            # self._scaling[i][scales_min_idx] = self.scaling_inverse_activation(
+            #     self.get_scaling[i][scales_min_idx] / 10.0
+            # )
+
+            # self._scaling[i][scales_min_idx] = self.scaling_inverse_activation(
+            #     ((self.get_scaling[i][scales_min_idx] * 1000.0) / (torch.sum(self.get_scaling[i]) * 1000.0)) / 1000.0
+            # )
+
             self._scaling[i][scales_min_idx] = self.scaling_inverse_activation(
-                self.get_scaling[i][scales_min_idx] / 10
+                self.get_scaling[i][scales_min_idx] / torch.sum(self.get_scaling[i])
             )
 
             # self._scaling[i][scales_min_idx] = scales[i][scales_min_idx] / torch.sum(scales[i])
@@ -574,3 +583,24 @@ class GaussianModel:
 
         print("\nGaussians flattened.")
         print("memory:", torch.cuda.memory_allocated() / 1024 / 1024)
+
+    def flatten_duplicate_gaussians(self):
+        all_selected_mask = torch.ones(self.get_xyz.shape[0], device="cuda", dtype=bool)
+
+        new_xyz = self._xyz[all_selected_mask]
+        new_features_dc = self._features_dc[all_selected_mask]
+        new_features_rest = self._features_rest[all_selected_mask]
+        new_opacities = self._opacity[all_selected_mask]
+        new_scaling = self._scaling[all_selected_mask]
+        new_rotation = self._rotation[all_selected_mask]
+
+        for i in range(len(self._xyz)):
+            scales_min_idx = torch.argmin(self.get_scaling[i])
+
+            new_scaling[i][scales_min_idx] = self.scaling_inverse_activation(
+                self.get_scaling[i][scales_min_idx] / torch.sum(self.get_scaling[i])
+            )
+
+        self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
+
+        print("\nGaussians flattened.")
