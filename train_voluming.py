@@ -24,6 +24,11 @@ from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+from skimage import exposure
+
 try:
     from torch.utils.tensorboard import SummaryWriter
 
@@ -96,8 +101,137 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], \
         render_pkg["visibility_filter"], render_pkg["radii"]
 
-        # Loss
         gt_image = viewpoint_cam.original_image.cuda()
+        if iteration == 7000:
+            # print g.t., rendering, loss map
+
+            # L1 map
+            l1_map = torch.abs((image - gt_image))
+
+            # PSNR is identical to L2
+            # psnr_map = (((image - gt_image)) ** 2)
+
+            # LPIPS map
+            # Calculate the patch size based on the number of patches (4x4)
+            patch_size_y = gt_image.shape[1] // 4
+            patch_size_x = gt_image.shape[2] // 4
+
+            # Initialize list to store LPIPS values for each patch
+            lpips_patches = []
+
+            # Iterate over the 4x4 grid of patches
+            for i in range(4):
+                for j in range(4):
+                    # Extract patches from both images
+                    image_patch = image[:, i * patch_size_y:(i + 1) * patch_size_y, j * patch_size_x:(j + 1) * patch_size_x]
+                    gt_image_patch = gt_image[:, i * patch_size_y:(i + 1) * patch_size_y,
+                                     j * patch_size_x:(j + 1) * patch_size_x]
+
+                    # Add batch dimension
+                    image_patch = image_patch.unsqueeze(0)
+                    gt_image_patch = gt_image_patch.unsqueeze(0)
+
+                    # Compute LPIPS value for the current patch
+                    lpips_value = lpips(image_patch, gt_image_patch)
+                    lpips_patches.append(lpips_value.item())
+
+            # Convert list of LPIPS values to a tensor and reshape to 4x4 grid
+            lpips_patches = torch.tensor(lpips_patches).view(4, 4)
+
+            # Initialize the final tensor to store the LPIPS values in full resolution
+            lpips_map = torch.zeros(1, 545, 980)
+
+            # Place each LPIPS value back into the corresponding patch in the final tensor
+            for i in range(4):
+                for j in range(4):
+                    lpips_map[:, i * patch_size_y:(i + 1) * patch_size_y, j * patch_size_x:(j + 1) * patch_size_x] = \
+                    lpips_patches[i, j]
+
+            ssim_map = ssim(image, gt_image, return_map=True)
+
+            # Convert tensors to numpy arrays
+            def tensor_to_numpy(tensor):
+                return tensor.detach().cpu().numpy().transpose(1, 2, 0)
+
+            gt_image_np = tensor_to_numpy(gt_image)
+            image_np = tensor_to_numpy(image)
+            l1_map_np = tensor_to_numpy(l1_map).mean(axis=2)  # Average over color channels for L1 map
+            lpips_map_np = tensor_to_numpy(lpips_map).squeeze()  # Remove batch dimension
+            ssim_map_np = tensor_to_numpy(ssim_map).mean(axis=2)
+
+            # Normalize the maps to [0, 1] for visualization
+            def normalize_map(map):
+                return (map - map.min()) / (map.max() - map.min())
+
+            l1_map_np = normalize_map(l1_map_np)
+            lpips_map_np = normalize_map(lpips_map_np)
+            ssim_map_np = normalize_map(ssim_map_np)
+
+            # Enhance SSIM contrast using histogram equalization
+            ssim_map_np = exposure.equalize_adapthist(ssim_map_np)
+            lpips_map_np = exposure.equalize_adapthist(lpips_map_np)
+
+            # Print intermediate normalized values
+            print("L1 Map Min/Max:", l1_map_np.min(), l1_map_np.max())
+            print("LPIPS Map Min/Max:", lpips_map_np.min(), lpips_map_np.max())
+            print("SSIM Map Min/Max:", ssim_map_np.min(), ssim_map_np.max())
+
+            # Function to overlay a map on the image in red color
+            def overlay_map(image, map, image_weight=0.7, map_weight=0.3):
+                map_colored = np.zeros_like(image)
+                map_colored[:, :, 0] = map * 255  # Red channel
+                overlayed = cv2.addWeighted(image, image_weight, map_colored, map_weight, 0)
+                return overlayed
+
+            # Overlay maps on the ground truth image
+            l1_overlay = overlay_map(gt_image_np, l1_map_np)
+            lpips_overlay = overlay_map(gt_image_np, lpips_map_np.squeeze(), 0.7, 0.3)  # Remove batch dimension
+            ssim_overlay = overlay_map(gt_image_np, ssim_map_np, 0.3, 0.7)
+
+            # Plot the images and maps
+            fig, axs = plt.subplots(3, 3, figsize=(15, 10))
+
+            axs[0, 0].imshow(gt_image_np)
+            axs[0, 0].set_title('Ground Truth Image')
+            axs[0, 0].axis('off')
+
+            axs[0, 1].imshow(image_np)
+            axs[0, 1].set_title('Rendered Image')
+            axs[0, 1].axis('off')
+
+            axs[1, 0].imshow(l1_overlay)
+            axs[1, 0].set_title('L1 Loss Map')
+            axs[1, 0].axis('off')
+
+            axs[1, 1].imshow(lpips_overlay)
+            axs[1, 1].set_title('LPIPS Map')
+            axs[1, 1].axis('off')
+
+            axs[1, 2].imshow(ssim_overlay)
+            axs[1, 2].set_title('SSIM Map')
+            axs[1, 2].axis('off')
+
+            # Third row: Direct visualization of normalized maps
+            axs[2, 0].imshow(l1_map_np, cmap='hot')
+            axs[2, 0].set_title('L1 Map Only')
+            axs[2, 0].axis('off')
+
+            axs[2, 1].imshow(lpips_map_np, cmap='hot')
+            axs[2, 1].set_title('LPIPS Map Only')
+            axs[2, 1].axis('off')
+
+            axs[2, 2].imshow(ssim_map_np, cmap='hot')
+            axs[2, 2].set_title('SSIM Map Only')
+            axs[2, 2].axis('off')
+
+            # Remove the last empty subplot
+            fig.delaxes(axs[0, 2])
+
+            plt.tight_layout()
+            plt.show()
+
+        # Loss
+        # gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         loss.backward()
@@ -131,8 +265,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
-                if iteration == 14999:
-                    gaussians.flatten_gaussians()
+                if iteration == 500:
+                    pass
+                    # gaussians.flatten_gaussians()
                     # gaussians.flatten_duplicate_gaussians()
 
                 if iteration % opt.opacity_reset_interval == 0 or (
